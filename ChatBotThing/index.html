@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width">
+        <title>Chat Bot Thing</title>
+
+        <link rel="stylesheet" href="./src/assets/styles/styles.css">
+        
+    </head>
+    <body>
+        <div class="left-container">
+            <section class="toolbar" aria-label="Toolbar with actions">
+                <button id="clear-button" aria-label="New Chat" onclick="this.blur();">
+                    <img src="./src/assets/images/new-chat.png" alt="New Chat">
+                    <span>New Chat</span>
+                </button>
+                <button id="context-button" aria-label="Context Enter" onclick="this.blur();">
+                    <span>Context</span>
+                </button>
+                <div class="save-load-div" aria-label="Save or load buttons">
+                    <input type="file" id="loadContextInput"/>
+                    <button id="load-button" aria-label="Load Button" onclick="this.blur();">
+                        <img src="./src/assets/images/load.png" alt="Load Context">
+                    </button>
+
+                    <button id="save-button" aria-label="Save Button" onclick="this.blur();">
+                        <img src="./src/assets/images/save.png" alt="Save Context">
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <div class="container">
+            <header>
+                <h1>Chat Bot Thing</h1>
+            </header>
+
+            <section class="chat-container" aria-label="Chatbot interface">
+                <div class="chat-messages" id="chat-messages" aria-live="polite" aria-label="Chat messages">
+                </div>
+
+                <form id="chat-form" class="chat-form" aria-label="Send a message">
+                    <div id="input-button">
+                        <textarea id="user-input" placeholder="Enter manga description..." aria-label="Message input" autocomplete="off"></textarea>
+                        <button type="button" id="paste-context-button" aria-label="Paste Context Button" onclick="this.blur();" title="Copy from context.">
+                            <img src="./src/assets/images/paste.png" alt="Paste Button"/>
+                        </button>
+                    </div>
+                    
+                    <select name="message-type" id="message-type">
+                        <option value="manga">Manga</option>
+                        <option value="synopsis">Synopsis</option>
+                        <option value="characters">Characters</option>
+                        <option value="outline">Outline</option>
+                        <option value="panels">Panels</option>
+                        <option value="prompts">Prompts</option>
+                        <option value="help">Help</option>
+                    </select>    
+                    <button type="submit" id="send-message-button" onclick="this.blur();"><img src="./src/assets/images/send-message.png" alt="Send"></button>
+            </section>
+        </div>
+
+        <div id="contextModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <span class="close" id="closeContextModal">&times;</span>
+                    <h2>Context</h2>
+                </div>
+                <div class="modal-body" id="context-modal-body">
+                    <p>Synopsis:</p>
+                    <textarea class="contextTextArea"  autocomplete="off" id="synopsisTextArea"></textarea>
+                    <p>Characters:</p>
+                    <textarea class="contextTextArea"  autocomplete="off" id="characterTextArea"></textarea>
+                    <p>Outline:</p>
+                    <textarea class="contextTextArea"  autocomplete="off" id="outlineTextArea"></textarea>
+                    <p>Panels:</p>
+                    <textarea class="contextTextArea"  autocomplete="off" id="panelTextArea"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <script src="./src/scripts/jquery.js"></script>
+        <script src="./src/scripts/main.js"></script>
+    </body>
+
+
+</html>

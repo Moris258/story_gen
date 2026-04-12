@@ -1,0 +1,7 @@
+{
+    "dependencies": ["."],
+    "graphs": {
+        "agent": "./story_gen_part2.py:manager_agent"
+    },
+    "env": "../.env"
+  }
