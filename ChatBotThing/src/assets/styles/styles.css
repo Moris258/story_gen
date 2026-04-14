@@ -157,11 +157,74 @@ header h1 {
 }
 
 .chat-form {
+  border-top: var(--chat-border-top);
+  background: var(--element-background);
+}
+
+.chat-form-row{
   display: flex;
   gap: 12px;
   padding: 16px;
-  border-top: var(--chat-border-top);
+}
+
+.chat-form-row input[type="checkbox"]{
+  display: none;
+}
+
+#genre-div{
+  overflow: auto;
+  display: flex;
+  animation-name: fadeIn;
+  animation-duration: 0.5s;
+  -webkit-animation-name: fadeIn;
+  -webkit-animation-duration: 0.5s;
+}
+
+#genre-div::-webkit-scrollbar {
+  height: 10px;
+}
+#genre-div::-webkit-scrollbar-track {
   background: var(--element-background);
+}
+#genre-div::-webkit-scrollbar-thumb {
+  background: var(--element-background-light);
+  border-radius: 4px;
+}
+
+.checkbox-container {
+  display: block;
+  position: relative;
+  padding-left: 35px;
+  padding-right: 65px;
+  margin-bottom: 40px;
+  width: fit-content;
+  cursor: pointer;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.checkbox-container .checkbox-div{
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  top: 0;
+  left: 0;
+  height: 40px;
+  width: 100px;
+  background-color: var(--button-background);
+  border-radius: 14px;
+}
+/* On mouse-over, add a grey background color */
+.checkbox-container:hover input ~ .checkbox-div {
+  background-color: var(--button-hover-background);
+}
+
+/* When the checkbox is checked, add a blue background */
+.checkbox-container input:checked ~ .checkbox-div {
+  background-color: var(--chat-text-color-dark);
 }
 
 textarea {
@@ -261,12 +324,12 @@ button > span {
   max-height: 100%;  
 }
 
-@-webkit-keyframes animatetop {
+@-webkit-keyframes fadeIn {
   from {opacity: 0}
   to {lopacity: 1}
 }
 
-@keyframes animateleft {
+@keyframes fadeIn {
   from {opacity: 0}
   to {opacity: 1}
 }
@@ -278,9 +341,11 @@ button > span {
   border: 1px solid var(--border-color);
   width: 80%;
   overflow: auto;
-  animation-name: animateleft;
+  animation-name: fadeIn
+;
   animation-duration: 0.4s;
-  -webkit-animation-name: animatetop;
+  -webkit-animation-name: fadeIn
+;
   -webkit-animation-duration: 0.4s;
   border-radius: 14px;
 }

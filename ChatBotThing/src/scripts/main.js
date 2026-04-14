@@ -10,6 +10,8 @@ const loadContextInput = document.getElementById('loadContextInput');
 const loadButton = document.getElementById('load-button');
 const pasteContextButton = document.getElementById('paste-context-button');
 
+const genreDiv = document.getElementById('genre-div');
+
 const saveButton = document.getElementById('save-button');
 
 //Context text areas
@@ -23,6 +25,25 @@ const SENDER_ID = Object.freeze({
     BOT: Symbol("bot"),
     ERROR: Symbol("err"),
 })
+
+const genres = ["Romance", "Comedy", "Drama", "Action", "Fantasy", "School", "Supernatural",
+  "Slice of Life", "Adventure", "Sci-Fi", "Mystery", "Historical", "Horror"];
+
+genres.forEach(element => {
+  let label = document.createElement("label");
+  label.className = "checkbox-container";
+  let checkbox = document.createElement("input");
+  checkbox.id = element;
+  checkbox.name = element;
+  checkbox.value = element;
+  checkbox.type = "checkbox";
+  let div = document.createElement("div");
+  div.className = "checkbox-div";
+  div.innerHTML = element;
+  label.appendChild(checkbox);
+  label.appendChild(div);
+  genreDiv.appendChild(label);
+});
 
 const inputPlaceholders = {
   "manga": "Enter manga description...",
@@ -124,6 +145,23 @@ async function getBotReply(message, type){
     url += 'param1=' + message;
 
   switch(type){
+    case "synopsis":
+    case "manga":
+        let checkboxes = genreDiv.getElementsByTagName("input");
+        let oneChecked = false;
+        for(let i = 0; i < checkboxes.length; i++){
+          let checkbox = checkboxes.item(i);
+          if(checkbox.checked){
+            if(!oneChecked){
+              oneChecked = true;
+              url += '&genres=';
+            }
+            url += checkbox.value + ", ";
+          }
+        }
+        console.log(url);
+        
+      break;
     case "panels":
       url += '&synopsis=' + synopsisArea.value;
       url += '&characters=' + characterArea.value;
@@ -291,6 +329,13 @@ function DownloadFile(jsonData, fileName){
 messageType.addEventListener("change", function(){
   const value = this.value;
   userInput.placeholder = inputPlaceholders[value];
+
+  
+
+  if(value == "manga" || value == "synopsis")
+    genreDiv.style.display = "flex";
+  else
+    genreDiv.style.display = "none";
   
 });
 

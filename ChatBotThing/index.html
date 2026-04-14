@@ -21,11 +21,11 @@
                 </button>
                 <div class="save-load-div" aria-label="Save or load buttons">
                     <input type="file" id="loadContextInput"/>
-                    <button id="load-button" aria-label="Load Button" onclick="this.blur();">
+                    <button id="load-button" title="Load Context" aria-label="Load Button" onclick="this.blur();">
                         <img src="./src/assets/images/load.png" alt="Load Context">
                     </button>
 
-                    <button id="save-button" aria-label="Save Button" onclick="this.blur();">
+                    <button id="save-button" title="Save Context" aria-label="Save Button" onclick="this.blur();">
                         <img src="./src/assets/images/save.png" alt="Save Context">
                     </button>
                 </div>
@@ -42,23 +42,29 @@
                 </div>
 
                 <form id="chat-form" class="chat-form" aria-label="Send a message">
-                    <div id="input-button">
-                        <textarea id="user-input" placeholder="Enter manga description..." aria-label="Message input" autocomplete="off"></textarea>
-                        <button type="button" id="paste-context-button" aria-label="Paste Context Button" onclick="this.blur();" title="Copy from context.">
-                            <img src="./src/assets/images/paste.png" alt="Paste Button"/>
-                        </button>
-                    </div>
+                    <div class="chat-form-row">
+                        <div id="input-button">
+                            <textarea id="user-input" placeholder="Enter manga description..." aria-label="Message input" autocomplete="off"></textarea>
+                            <button type="button" id="paste-context-button" aria-label="Paste Context Button" onclick="this.blur();" title="Copy from context.">
+                                <img src="./src/assets/images/paste.png" alt="Paste Button"/>
+                            </button>
+                        </div>
+                        
+                        <select name="message-type" id="message-type">
+                            <option value="manga">Manga</option>
+                            <option value="synopsis">Synopsis</option>
+                            <option value="characters">Characters</option>
+                            <option value="outline">Outline</option>
+                            <option value="panels">Panels</option>
+                            <option value="prompts">Prompts</option>
+                            <option value="help">Help</option>
+                        </select>    
+                        <button type="submit" id="send-message-button" onclick="this.blur();"><img src="./src/assets/images/send-message.png" alt="Send"></button>
+                    </div>         
                     
-                    <select name="message-type" id="message-type">
-                        <option value="manga">Manga</option>
-                        <option value="synopsis">Synopsis</option>
-                        <option value="characters">Characters</option>
-                        <option value="outline">Outline</option>
-                        <option value="panels">Panels</option>
-                        <option value="prompts">Prompts</option>
-                        <option value="help">Help</option>
-                    </select>    
-                    <button type="submit" id="send-message-button" onclick="this.blur();"><img src="./src/assets/images/send-message.png" alt="Send"></button>
+                    <div id="genre-div" class="chat-form-row">
+                    </div>
+                </form>
             </section>
         </div>
 

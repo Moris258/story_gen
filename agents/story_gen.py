@@ -429,8 +429,10 @@ def run_prompt_gen():
 
 @app.route("/manga")
 def create_manga():
-    model = None
     req = request.args.get("param1", "")
+    genres = request.args.get("genres", "");
+    if(genres != ""):
+        req += " genres: " + genres
     print("Creating manga from prompt: " + req)
     pipe, lora_model = load_synopsis_model();
 
@@ -470,7 +472,11 @@ def create_manga():
 @app.route("/synopsis")
 def run_synopsis_gen():
     req = request.args.get("param1", "")
-    print("Creating manga from prompt: " + req)
+    genres = request.args.get("genres", "");
+    if(genres != ""):
+        req += " genres: " + genres
+
+    print("Creating synopsis from prompt: " + req)
     pipe, lora_model = load_synopsis_model();
 
     synopsis = generate_synopsis(req, pipe)
