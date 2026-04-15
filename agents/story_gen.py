@@ -24,7 +24,7 @@ def load_synopsis_model() -> tuple[Pipeline, PeftModel]:
     )
 
     model_id = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit"
-    lora_adapter_path = "Moris258/Meta-Llama-3.1-8B-Instruct-Manga-Synopsis3-LORA"
+    lora_adapter_path = "Moris258/Meta-Llama-3.1-8B-Instruct-Manga-Synopsis-v.4-LORA"
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", trust_remote_code=True)
     lora_loaded_model = PeftModel.from_pretrained(model, lora_adapter_path, device_map="auto", trust_remote_code=True)
