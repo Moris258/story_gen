@@ -84,20 +84,25 @@ outline = """
 genres = "supernatural, school, drama"
 
 MANAGER_AGENT_PROMPT = """
-    Pretend you are a writer creating a manga. Based on the provided outline, generate the story.
-    The provided outline features scene headers, indicated by a preceding "**", with bullet points for each scene.
-    The scene also includes information about the scene setting.
+    Pretend you are a writer creating a manga. Based on the provided scene outline, generate the story.
+    The provided outline features a scene header, indicated by a preceding "**", with bullet points for each scene.
     Bullet points are indicated by a preceding "*".
-    For every bullet point in the outline, follow these steps:
-    1. use the "generate_story" tool to generate a section of the story based on the current bullet point in the outline, the last panel of the story generated so far, the character and setting information and information about future events.
-    Future events are all upcoming bullet points in the current scene and in all following scenes. Include bullet points from the current scene as well.
-    If generating the last bullet point, provide an empty string for future events field. Character information for the current scene is included below the scene header.
-    The format of "generate_story" should be: generate_story(bullet_point=bullet_point, last_panel=last_panel, future_events=future_events, characters=characters, setting=setting).
-    2. use the "update_story" tool to update the panels in the state with the newly generated section. Make sure to include all generated panels from the "generate_story" tool. The format of "update_story" should be: update_story(story_text=generated_section).
+    The scene also includes information about the scene setting and characters in the scene.
+    You are also provided all information about all future scenes. The future scenes information may be empty. Do not generate your own future scenes.
+    Only generate story for the current scene, not future scenes.
+    For every bullet point in the scene, follow these steps:
+        Step 1. use the "generate_story" tool to generate a section of the story based on the current bullet point in the scene, the last panel of the story generated so far, the character and setting information and information about future events.
+        Future events are all upcoming bullet points in the current scene and in all future scenes. Include bullet points from the current scene as well.
+        If generating the last bullet point, provide an empty string for future events field. Character information for the current scene is included below the scene header.
+        The format of "generate_story" should be: generate_story(bullet_point=bullet_point, last_panel=last_panel, future_events=future_events, characters=characters, setting=setting).
+
+        Step 2. use the "update_story" tool to update the panels in the state with the newly generated section. Make sure to include all generated panels from the "generate_story" tool.
+        The format of "update_story" should be: update_story(story_text=generated_section).
+
     Make only 1 tool call at a time, and wait for the response before making the next tool call.
     Repeat the process for the next bullet point in the outline until the entire outline is covered.
-    After you are done generating the story sections for all bullet points in the outline, retrieve all generated panels by using the "get_story" tool and return that to the user. Do not return any other information.
-    Return only the panels from the "get_story" tool, do not include any extra text.
+    After you are done generating the story sections for all bullet points in the outline, return all generated panels from the scene.
+    Do not return any extra information, just the panels.
 """
 
 SUMMARY_AGENT_PROMPT = """
@@ -110,16 +115,17 @@ SUMMARY_AGENT_PROMPT = """
 
 STORY_AGENT_PROMPT = """
     Pretend you are a writer making panels for a manga. Continue the story from the last panel, following the outline title and keeping in mind the overall story summary.
+    Do not include the last panel in the newly generated panels.
     Make sure that the generated story fits the provided genres, if any are provided.
     You are also provided with a list of future events. Make sure that the generated story does not clash with any of the future events and that the story can flow naturally into the next event.
     Only generate story content that is relevant to the current bullet point in the outline. Do not include any content that is not relevant to the current bullet point, even if it is relevant to the overall story.
     Include the characters provided. You don't have to include all characters, only the most relevant ones to the current section of the story.
     Try to incorporate the scene setting into the panel description.
     Generate a sequence of manga panels in text form that continue the story. Each panel should have a description of the scene and any dialogue between characters. The panels should be formatted as follows:
-Panel 1:
-Scene description here.
-Character name: Dialogue here.
-etc.
+        Panel 1:
+        Scene description here.
+        Character name: Dialogue here.
+        etc.
     Generate at least 3 panels for each section of the story, but feel free to generate more if you think it is necessary to continue the story in a compelling way.
     Return only the generated panels, do not include any extra text.
 """
@@ -293,70 +299,6 @@ Mio (thought bubble): Why can't anyone talk to me? Don't they know I'm not so ba
 Panel 3:
 Scene description: The cafeteria falls silent as students start to gather around their lockers. Mio's eyes follow them, feeling like an outcast.
 Mio (sighs): Just another day...
-
-Panel 1:
-Scene description: The empty hallway stretches out before Mio as she walks towards her locker. She keeps her head down, avoiding eye contact with anyone.
-Mio Katsuragi: (to herself) Another day...
-
-Panel 2:
-Scene description: Mio's gaze drifts towards the cafeteria, where students are gathered for lunch. She spots a group of her classmates laughing and chatting together.
-Mio Katsuragi: (thinking) Why can't I be like them? They have friends, they're popular... why do I always feel so alone?
-
-Panel 3:
-Scene description: Mio's eyes well up with tears as she opens her locker door. She pulls out a book and begins to scribble notes in the margins.
-Mio Katsuragi: (whispering) Just one person, just one friend... that's all I want...
-
-Panel 4:
-Scene description: Students begin to gather around their lockers, chatting with each other and sharing stories. Mio feels a pang of sadness as she realizes she'll be spending another day alone.
-Mio Katsuragi: (thinking) Why can't anyone see past my face? Past the surface level?
-
-Panel 5:
-Scene description: A group of students glance in Mio's direction, their faces filled with curiosity and amusement. They whisper to each other, and one of them cracks a joke at her expense.
-Mio Katsuragi: (defensively) Shut up... just leave me alone...
-
-Panel 6:
-Scene description: The scene shifts to the school courtyard, where students are playing sports or lounging on benches. Mio sits on a bench, looking down at her feet.
-Sakura Tanaka: Hi! Mind if I join you? I saw you sitting here all by yourself, and I thought it might be nice to have some company.
-
-Panel 3:
-Scene description: Sakura sits down next to Mio on the bench, unfolding a sandwich from her own lunch box. She offers a warm smile as she begins to eat.
-Sakura Tanaka: Great! My name is Sakura, by the way. I'm new here this year.
-
-Panel 4:
-Scene description: Mio looks down at her own lunch, then back up to Sakura with a hint of curiosity. Sakura continues to eat and chat, not seeming to notice Mio's initial hesitation.
-Sakura Tanaka: So, what brings you to our school? Are you from around here?
-Mio Katsuragi: (hesitantly) Y-yeah... I'm from around here.
-
-Panel 5:
-Scene description: Sakura takes a bite of her sandwich, and her eyes light up with delight. Mio can't help but be drawn in by Sakura's infectious enthusiasm.
-Sakura Tanaka: Mmm, this is so good! Have you tried the sandwiches at the café near school? They're amazing!
-Mio Katsuragi: (softening) N-no... I don't usually get lunch from there.
-
-Panel 6:
-Scene description: The two girls continue to talk and laugh together, their conversation flowing easily. For the first time all day, Mio feels like she's found someone who doesn't see her as an outcast.
-Sakura Tanaka: So, what do you like to do for fun? I'm really into art and music – maybe we can exchange recommendations sometime?
-Mio Katsuragi: (smiling slightly) Y-yeah... that sounds nice.
-
-Panel 7:
-Scene description: The bell rings, signaling the end of lunchtime. Sakura looks at Mio with a friendly smile.
-Sakura Tanaka: Well, I should probably get going. But it was really great talking to you, Mio! Maybe we can sit together again tomorrow?
-Mio Katsuragi: (smiling more genuinely) Y-yeah... that would be nice.
-
-Panel 1:
-Scene description: A quiet corner of the school hallway during lunchtime. Mio stands alone, looking down at her feet, while Sakura sits on the floor beside her, chatting.
-Mio: I'm just glad we're not in that awful math class together...
-Sakura Tanaka: (laughs) Yeah, Mr. Tanaka is crazy! Do you think he'd make us do algebra for the rest of our lives?
-
-Panel 2:
-Scene description: Sakura glances over at Mio, concerned.
-Sakura Tanaka: You okay? You seem a bit... lost again.
-Mio Katsuragi: (smiling more genuinely) Y-yeah... that would be nice.
-
-Panel 3:
-Scene description: A boy with messy black hair and sunglasses walks into the hallway. He's wearing a white school jacket with no emblem, and his eyes scan the area as if searching for someone.
-Kuroe Shinoda: (whispering to himself) She's not alone...
-
-
 """
 
 
@@ -442,6 +384,33 @@ image_prompt_agent = create_agent(
 app = Flask(__name__)
 CORS(app)
 
+def generate_story(outline: str, synopsis: str, characters: str, genres: str) -> str:
+    story = ""
+    scenes = outline.split("**Scene")
+    print(scenes)
+    for scene in scenes:
+        index = scenes.index(scene)
+        
+        if(index == 0):
+            continue
+        future_scenes = ""
+        for i in range(index + 1, len(scenes)):
+            future_scenes += "**Scene" + scenes[i] + "\n"
+
+        story += manager_agent.invoke({
+            "messages": [HumanMessage(content=f"Current scene: **Scene{scene}\n\nFuture scenes: {future_scenes}")]
+        },
+            context=InputData(
+                synopsis=synopsis,
+                characters=characters,
+                outline=outline,
+                genres=genres
+            )
+        )["messages"][-1].content
+
+    return story
+
+
 
 @app.route("/help")
 def run_prompt_gen():
@@ -474,15 +443,7 @@ def create_manga():
         "messages": [HumanMessage(content=f"Synopsis: {synopsis}\nCharacters: {characters}")]
     })["messages"][-1].content
 
-    panels = manager_agent.invoke({
-        "messages": [HumanMessage(content=outline)]},
-        context=InputData(
-            synopsis=synopsis,
-            characters=characters,
-            outline=outline,
-            genres=genres,
-        )
-    )["messages"][-1].content
+    panels = generate_story(outline, synopsis, characters, genres)
 
     image_prompts = image_prompt_agent.invoke({
         "messages": [HumanMessage(content=f"Panels: {panels}\nCharacters: {characters}")]
@@ -544,16 +505,8 @@ def run_manager_agent():
 
     print("Manager agent invoked with input: " + outline)
 
-    response = manager_agent.invoke({
-        "messages": [HumanMessage(content=outline)]},
-        context=InputData(
-            synopsis=synopsis,
-            characters=characters,
-            outline=outline,
-            genres=genres
-        )
-    )
-    return jsonify(response["messages"][-1].content)
+    story = generate_story(outline, synopsis, characters, genres)
+    return jsonify(story)
 
 @app.route("/prompts")
 def run_prompt_agent():
