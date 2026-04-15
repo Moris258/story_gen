@@ -48,7 +48,7 @@ def generate_synopsis(input: str, pipe: Pipeline):
         messages,
     )
 
-    return outputs[0]["generated_text"][-1]["content"][10:]
+    return outputs[0]["generated_text"][-1]["content"].split("synopsis: ")[1]
 
 
 
