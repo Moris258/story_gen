@@ -51,7 +51,7 @@ const inputPlaceholders = {
   "characters": "Enter manga synopsis or use synopsis in context...",
   "outline": "Enter manga synopsis or use synopsis in context...",
   "panels": "Enter outline or use outline in context...",
-  "prompts": "Enter outline or use outline in context...",
+  "prompts": "Enter panel information or use panels in context...",
   "help": "What would you like help with?",
 }
 

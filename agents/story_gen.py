@@ -85,15 +85,19 @@ genres = "supernatural, school, drama"
 
 MANAGER_AGENT_PROMPT = """
     Pretend you are a writer creating a manga. Based on the provided outline, generate the story.
-    For every bullet point, indicated by a preceding "*", in the outline, follow these steps:
-    1. use the "generate_story" tool to generate a section of the story based on the current bullet point in the outline, the last panel of the story generated so far, and all following bullet points in the outline.
-    If generating the last bullet point, provide an empty string for future events field. Character information for the current bullet point is included a line below the bullet point.
-    The format of "generate_story" should be: generate_story(bullet_point=bullet_point, last_panel=last_panel, future_events=future_events, characters=characters).
+    The provided outline features scene headers, indicated by a preceding "**", with bullet points for each scene.
+    The scene also includes information about the scene setting.
+    Bullet points are indicated by a preceding "*".
+    For every bullet point in the outline, follow these steps:
+    1. use the "generate_story" tool to generate a section of the story based on the current bullet point in the outline, the last panel of the story generated so far, the character and setting information and information about future events.
+    Future events are all upcoming bullet points in the current scene and in all following scenes. Include bullet points from the current scene as well.
+    If generating the last bullet point, provide an empty string for future events field. Character information for the current scene is included below the scene header.
+    The format of "generate_story" should be: generate_story(bullet_point=bullet_point, last_panel=last_panel, future_events=future_events, characters=characters, setting=setting).
     2. use the "update_story" tool to update the panels in the state with the newly generated section. Make sure to include all generated panels from the "generate_story" tool. The format of "update_story" should be: update_story(story_text=generated_section).
     Make only 1 tool call at a time, and wait for the response before making the next tool call.
     Repeat the process for the next bullet point in the outline until the entire outline is covered.
-    After you are done generating the story sections for all bullet points in the outline, retrieve all generated panels by using the "get_story" tool and return that to the user.
-    Return only the panels, do not include any extra text.
+    After you are done generating the story sections for all bullet points in the outline, retrieve all generated panels by using the "get_story" tool and return that to the user. Do not return any other information.
+    Return only the panels from the "get_story" tool, do not include any extra text.
 """
 
 SUMMARY_AGENT_PROMPT = """
@@ -110,6 +114,7 @@ STORY_AGENT_PROMPT = """
     You are also provided with a list of future events. Make sure that the generated story does not clash with any of the future events and that the story can flow naturally into the next event.
     Only generate story content that is relevant to the current bullet point in the outline. Do not include any content that is not relevant to the current bullet point, even if it is relevant to the overall story.
     Include the characters provided. You don't have to include all characters, only the most relevant ones to the current section of the story.
+    Try to incorporate the scene setting into the panel description.
     Generate a sequence of manga panels in text form that continue the story. Each panel should have a description of the scene and any dialogue between characters. The panels should be formatted as follows:
 Panel 1:
 Scene description here.
@@ -120,10 +125,13 @@ etc.
 """
 
 CHARACTER_DETECT_AGENT = """
-    You are an agent whose job is to identify the characters that are present in a given section of the story.
-    The characters you should be looking for will be provided in the prompt.
-    Be quite strict with yourself and only identify characters that are explicitly mentioned in the story section. Do not make assumptions or guesses about characters that may be present based on the context of the story.
-    Return the characters detected as a string, including all the information about the character provided.
+    You are an agent whose job it is to return information about the characters.
+    You are given a list of all characters, return information about those characters that are included in mentioned characters.
+    Structure the output as such for every character mentioned:
+        "Full Name", "Gender (male/female)"
+        Physical Description: "the character's physical description"
+        Personality Description: "the character's personality description"
+        Connection to Characters: "their connection to other characters"
     Return only the character information, do not include any extra text.
 """
 
@@ -173,11 +181,11 @@ def get_story(runtime: ToolRuntime) -> str:
         return ""
 
 @tool
-def generate_story(bullet_point: str, last_panel: str, future_events: str, characters: str, runtime: ToolRuntime) -> str:
+def generate_story(bullet_point: str, last_panel: str, future_events: str, characters: str, setting:str, runtime: ToolRuntime) -> str:
     """Generate a section of the story based on the provided bullet point, last sentence, story summary, and characters."""
-    # characters = character_detect_agent.invoke({
-    #     "messages": [HumanMessage(content=bullet_point + "\ncharacters: " + runtime.context.characters)]
-    # })["messages"][-1].content
+    characters = character_detect_agent.invoke({
+        "messages": [HumanMessage(content="all characters: " + runtime.context.characters + "\nmentioned characters: " + characters)]
+    })["messages"][-1].content
     try:
         story_summary = summary_agent.invoke({
             "messages": [HumanMessage(content=runtime.state["text"])]
@@ -186,7 +194,7 @@ def generate_story(bullet_point: str, last_panel: str, future_events: str, chara
         story_summary = ""
 
     genres = runtime.context.genres
-    prompt = f"Bullet Point: {bullet_point}\nLast Panel: {last_panel}\nFuture Events: {future_events}\nStory Summary: {story_summary}\nCharacters: {characters}\nGenres: {genres}"
+    prompt = f"Bullet Point: {bullet_point}\nLast Panel: {last_panel}\nFuture Events: {future_events}\nStory Summary: {story_summary}\nCharacters: {characters}\nGenres: {genres}\nSetting: {setting}"
     response = story_agent.invoke({
         "messages": [HumanMessage(content=prompt)]
     })
@@ -215,15 +223,14 @@ CHARACTER_AGENT_SYSTEM_PROMPT = """
 OUTLINE_AGENT_SYSTEM_PROMPT = """
     Pretend that you are a writer creating a general outline for a manga. Base the outline on the provided synopsis in the user's prompt.
     The outline should include characters also provided in the user's prompt. The outline should be in a structured format, with clear sections and bullet points for each part of the story.
-    Also include information about which characters are present for each bullet point. Include information about the scene setting. Include only one specific setting, not an option between two or more.
+    Also include information about which characters are present for each scene. Include information about the scene setting. Include only one specific setting, not an option between two or more.
     Generate the scene outlines one by one.
     The outline should be in a structured as such:
         **"Scene number and name"**
             Setting: "place where the scene is set"
+            Characters: "characters in scene"
             *"first bullet point for scene"
-                Characters: "characters in first bullet point"
             *"second bullet point for scene"
-                Characters: "characters in second bullet point"
             etc.
     The outline should be detailed enough to provide a clear roadmap for writing the manga, but it should not include any actual story content or dialogue.
     Focus on creating a high-level overview of the story's structure and key elements based on the provided synopsis and characters.
@@ -428,7 +435,7 @@ image_prompt_agent = create_agent(
     system_prompt=PANEL_PROMPT_AGENT_SYSTEM_PROMPT,
 )
 
-
+#TODO: make sure that character passing to generate_story is working, alternatively just do it manually.
 
 
 
