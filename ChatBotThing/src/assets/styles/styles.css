@@ -181,7 +181,7 @@ header h1 {
 }
 
 #genre-div::-webkit-scrollbar {
-  height: 10px;
+  height: 5px;
 }
 #genre-div::-webkit-scrollbar-track {
   background: var(--element-background);

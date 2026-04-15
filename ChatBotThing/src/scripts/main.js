@@ -144,24 +144,23 @@ async function getBotReply(message, type){
   if(message)
     url += 'param1=' + message;
 
+  
+  let checkboxes = genreDiv.getElementsByTagName("input");
+  let oneChecked = false;
+  for(let i = 0; i < checkboxes.length; i++){
+    let checkbox = checkboxes.item(i);
+    if(checkbox.checked){
+      if(!oneChecked){
+        oneChecked = true;
+        url += '&genres=';
+      }
+      url += checkbox.value + ", ";
+    }
+  }
+  console.log(url);
+
+
   switch(type){
-    case "synopsis":
-    case "manga":
-        let checkboxes = genreDiv.getElementsByTagName("input");
-        let oneChecked = false;
-        for(let i = 0; i < checkboxes.length; i++){
-          let checkbox = checkboxes.item(i);
-          if(checkbox.checked){
-            if(!oneChecked){
-              oneChecked = true;
-              url += '&genres=';
-            }
-            url += checkbox.value + ", ";
-          }
-        }
-        console.log(url);
-        
-      break;
     case "panels":
       url += '&synopsis=' + synopsisArea.value;
       url += '&characters=' + characterArea.value;
@@ -243,10 +242,10 @@ chatForm.addEventListener('submit', function (event) {
   const type = messageType.value;
   const message = userInput.value.trim();
 
-  const characters = characterArea.value.trim();
-  const synopsis = synopsisArea.value.trim()
-  const outline = outlineArea.value.trim();
-  const panels = panelArea.value.trim();
+  // const characters = characterArea.value.trim();
+  // const synopsis = synopsisArea.value.trim()
+  // const outline = outlineArea.value.trim();
+  // const panels = panelArea.value.trim();
 
   if (!message) {
     return;
@@ -295,6 +294,15 @@ loadContextInput.addEventListener("change", async function (){
   characterArea.value = jsonContent["characters"];
   outlineArea.value = jsonContent["outline"];
   panelArea.value = jsonContent["panels"];
+  let genres = jsonContent["genres"];
+  let checkboxes = genreDiv.getElementsByTagName("input");
+  for(let i = 0; i < checkboxes.length; i++){
+      let checkbox = checkboxes.item(i);
+      if(genres.includes(checkbox.value)){
+        checkbox.checked = true;
+      }
+    }
+
 });
 
 
@@ -305,11 +313,24 @@ async function loadJSONFile(path){
 
 saveButton.addEventListener('click', function(){
     let contextInfo = document.getElementById('context-modal-body').getElementsByTagName("textarea");
+    let genres = "";
+    let checkboxes = genreDiv.getElementsByTagName("input");
+    for(let i = 0; i < checkboxes.length; i++){
+      let checkbox = checkboxes.item(i);
+      if(checkbox.checked){
+        genres += checkbox.value + ", ";
+      }
+    }
+
+
+
+
     let saveInfo = {
       "synopsis": contextInfo[0].value, 
       "characters": contextInfo[1].value,
       "outline": contextInfo[2].value,
       "panels": contextInfo[3].value,
+      "genres": genres,
     };
 
     DownloadFile(JSON.stringify(saveInfo, null, 2), "storyInfo.json");    
@@ -332,10 +353,10 @@ messageType.addEventListener("change", function(){
 
   
 
-  if(value == "manga" || value == "synopsis")
-    genreDiv.style.display = "flex";
-  else
-    genreDiv.style.display = "none";
+  // if(value == "manga" || value == "synopsis")
+  //   genreDiv.style.display = "flex";
+  // else
+  //   genreDiv.style.display = "none";
   
 });
 
