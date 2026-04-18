@@ -135,6 +135,19 @@ header h1 {
   border-bottom-left-radius: 4px;
 }
 
+.message.bot .img-container{
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: flex-start;
+  gap: 4px;
+}
+
+.message.bot .img-container img{
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border-color);
+}
+
 .message.bot hr{
   border-color: var(--chat-text-color-light);
 }

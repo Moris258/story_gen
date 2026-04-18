@@ -20,6 +20,7 @@ dependencies = [
     "langgraph-api>=0.7.91",
     "langgraph-cli>=0.4.19",
     "peft>=0.18.1",
+    "pillow>=12.2.0",
     "torch>=2.9.1",
     "torchvision>=0.24.1",
 ]

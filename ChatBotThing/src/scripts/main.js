@@ -19,6 +19,7 @@ const synopsisArea = document.getElementById('synopsisTextArea');
 const characterArea = document.getElementById('characterTextArea');
 const outlineArea = document.getElementById('outlineTextArea');
 const panelArea = document.getElementById('panelTextArea');
+const promptArea = document.getElementById('promptTextArea');
 
 const SENDER_ID = Object.freeze({
     HUMAN: Symbol("user"),
@@ -52,6 +53,8 @@ const inputPlaceholders = {
   "outline": "Enter manga synopsis or use synopsis in context...",
   "panels": "Enter outline or use outline in context...",
   "prompts": "Enter panel information or use panels in context...",
+  "image": "Enter prompt for image...",
+  "image_dummy": "Enter prompt for image...",
   "help": "What would you like help with?",
 }
 
@@ -97,7 +100,7 @@ function clearMessages(){
   chatMessages.innerHTML = '';
 }
 
-function toggleInputEnable(value){
+function toggleInputDisable(value){
   userInput.disabled = value;
   clearButton.disabled = value;
 }
@@ -106,7 +109,7 @@ function getBotReplyStream(message, type) {
   console.log("Getting bot reply for message: " + message);
   message = encodeURIComponent(message);
 
-  toggleInputEnable(true);
+  toggleInputDisable(true);
   let response = addMessage("", SENDER_ID.BOT);
   const evtSource = new EventSource('http://127.0.0.1:4500/' + type + '_stream?param1=' + message);
 
@@ -120,23 +123,84 @@ function getBotReplyStream(message, type) {
 
   evtSource.onerror = function(err) {
     console.error("Error: ", err);
-    toggleInputEnable(false);
+    toggleInputDisable(false);
     evtSource.close();
   }
 
   evtSource.addEventListener('end', function(event) {
     console.log("Received end event: " + event.data);
-    toggleInputEnable(false);
+    toggleInputDisable(false);
     evtSource.close();
   });
 }
 
-async function getBotReply(message, type){
+async function generateImages(message, type){  
+  toggleInputDisable(true);
+  let bubble = addMessage("", SENDER_ID.BOT);
+  let returnData = ""
+
+  let prompts = message.split(/\*\*Panel\s[0-9]+\*\*\sPrompt:\s/i);
+  prompts.splice(0, 1);
+  let conversation = panelArea.value.split(/\*\*Panel\s[0-9]+\*\*\s/i).join("").split("*");
+  conversation.splice(0, 1);
+  let convos = [];
+  let index = -1;
+  conversation.forEach(c => {
+    if(c.startsWith("Scene Description")){
+      convos.push("");
+      index++;
+    }
+    else
+      convos[index] += c + "\n";
+  });  
+
   
+  let imgContainer = document.createElement("div");
+  imgContainer.className = "img-container";
+  bubble.appendChild(imgContainer);  
+
+  try{
+    for(let i = 0; i < prompts.length; i++){
+      let prompt = prompts[i] + " in the style of manga black and white";
+      let convo = convos[i];
+      let url = 'http://127.0.0.1:4500/' + type + '?' + 'param1=' + prompt;
+      
+      message = encodeURIComponent(message);
+      await $.getJSON(url,
+      function(data, textStatus, jqXHR) {
+        returnData = data;
+      
+        response = returnData.replace(/\n/g, "<br>");
+      }
+      
+      );
+      let img = new Image();
+      img.src = 'data:image/png;base64,' + returnData;
+
+      //Add text either here or in python
+      //Probably here using a canvas and then draw a rectangle with the text on it.
+
+      imgContainer.appendChild(img);
+    }
+  }
+  catch(err){
+    deleteMessage(bubble);
+    console.log(error);
+    
+    addMessage("Couldn't get response from bot.", SENDER_ID.ERROR);
+  }
+  
+  toggleInputDisable(false);
+  return;
+}
+
+async function getBotReply(message, type){
   console.log("Getting bot reply for message: " + message);
   message = encodeURIComponent(message);
 
-  toggleInputEnable(true);
+  //When generating images, call every prompt 1 by 1 from here somewhere so they show up continously
+
+  toggleInputDisable(true);
   let response = "...";
   let returnData = "...";
   let bubble = addMessage(response, SENDER_ID.BOT);
@@ -144,7 +208,7 @@ async function getBotReply(message, type){
   if(message)
     url += 'param1=' + message;
 
-  
+
   let checkboxes = genreDiv.getElementsByTagName("input");
   let oneChecked = false;
   for(let i = 0; i < checkboxes.length; i++){
@@ -157,7 +221,7 @@ async function getBotReply(message, type){
       url += checkbox.value + ", ";
     }
   }
-  console.log(url);
+  //console.log(url);
 
 
   switch(type){
@@ -178,16 +242,33 @@ async function getBotReply(message, type){
       url += '&panels=' + panelArea.value;
       break;
   }
+  
 
   try{
-    await $.getJSON(url, 
+    await $.getJSON(url,
       function(data, textStatus, jqXHR) {
         returnData = data;
-        response = returnData.replace(/\n/g, "<br>");
+      
+        if(type != "manga")
+          response = returnData.replace(/\n/g, "<br>");
         }
     );
+    if(type == "manga"){
+      synopsisArea.value = returnData.synopsis;
+      characterArea.value = returnData.characters;
+      outlineArea.value = returnData.outline;
+      panelArea.value = returnData.panels;
+      promptArea.value = returnData.prompts;
+      deleteMessage(bubble);
+
+
+      generateImages(returnData.prompts, "image")
+      return;
+    }
+
+
+
     bubble.innerHTML = response;
-    //TODO: Add button to conveniently copy response to context depending on message type into message bubble.
     let copy_button = document.createElement("button");
     copy_button.className = "bot-message-button";
     copy_button.id = type;
@@ -205,6 +286,9 @@ async function getBotReply(message, type){
           break;
         case "panels":
           panelArea.value = returnData;
+          break;
+        case "prompts":
+          promptArea.value = returnData;
           break;
         default:
           navigator.clipboard.writeText(returnData).then(function(){
@@ -225,11 +309,15 @@ async function getBotReply(message, type){
   }
   catch(error){
     deleteMessage(bubble);
+    console.log(error);
+    
     addMessage("Couldn't get response from bot.", SENDER_ID.ERROR);
   }
-  
 
-  toggleInputEnable(false);
+
+
+
+  toggleInputDisable(false);
 }
 
 function getBotReplyDummy(message){
@@ -254,8 +342,11 @@ chatForm.addEventListener('submit', function (event) {
   addMessage(message, SENDER_ID.HUMAN);
   userInput.value = '';
   userInput.focus();
+  if(type == "image" || type == "image_dummy")
+    generateImages(message, type)
+  else
+    getBotReply(message, type);
 
-  getBotReply(message, type);
 });
 
 clearButton.addEventListener('click', function () {
@@ -265,7 +356,7 @@ clearButton.addEventListener('click', function () {
 contextButton.addEventListener('click', function (){
   contextModal.style.display = "flex";
 });
-    
+
 closeContextModal.onclick = function() {
   contextModal.style.display = "none";
 };
@@ -294,6 +385,7 @@ loadContextInput.addEventListener("change", async function (){
   characterArea.value = jsonContent["characters"];
   outlineArea.value = jsonContent["outline"];
   panelArea.value = jsonContent["panels"];
+  promptArea.value = jsonContent["prompts"];
   let genres = jsonContent["genres"];
   let checkboxes = genreDiv.getElementsByTagName("input");
   for(let i = 0; i < checkboxes.length; i++){
@@ -326,17 +418,18 @@ saveButton.addEventListener('click', function(){
 
 
     let saveInfo = {
-      "synopsis": contextInfo[0].value, 
+      "synopsis": contextInfo[0].value,
       "characters": contextInfo[1].value,
       "outline": contextInfo[2].value,
       "panels": contextInfo[3].value,
       "genres": genres,
+      "prompts": contextInfo[4].value,
     };
 
-    DownloadFile(JSON.stringify(saveInfo, null, 2), "storyInfo.json");    
+    DownloadFile(JSON.stringify(saveInfo, null, 2), "storyInfo.json");
 });
 
-function DownloadFile(jsonData, fileName){        
+function DownloadFile(jsonData, fileName){
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([jsonData], {
       type: "text/plain"
@@ -351,13 +444,13 @@ messageType.addEventListener("change", function(){
   const value = this.value;
   userInput.placeholder = inputPlaceholders[value];
 
-  
+
 
   // if(value == "manga" || value == "synopsis")
   //   genreDiv.style.display = "flex";
   // else
   //   genreDiv.style.display = "none";
-  
+
 });
 
 pasteContextButton.addEventListener('click', function(){
@@ -367,8 +460,14 @@ pasteContextButton.addEventListener('click', function(){
       userInput.value = synopsisArea.value.trim();
       break;
     case "panels":
-    case "prompts":
       userInput.value = outlineArea.value.trim();
+      break;
+    case "prompts":
+      userInput.value = panelArea.value.trim();
+      break;
+    case "image_dummy": 
+    case "image":
+      userInput.value = promptArea.value.trim();
       break;
   }
 });
