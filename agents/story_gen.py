@@ -557,7 +557,7 @@ def run_prompt_agent():
 @app.route("/image_dummy")
 def dummy_image():
     
-    image = Image.open("image.png")
+    image = Image.open("Images/image.png")
     img_bytes = io.BytesIO()
     image.save(img_bytes, format='PNG')
     img_bytes = img_bytes.getvalue()
@@ -569,6 +569,8 @@ def dummy_image():
 @app.route("/image")
 def run_image_agent():
     image_prompt = request.args.get("param1", "")
+    width = request.args.get("width", "576")
+    height = request.args.get("height", "1024")
     print("Image generator invoked with input: " + image_prompt)
     image = client.text_to_image(
         image_prompt,

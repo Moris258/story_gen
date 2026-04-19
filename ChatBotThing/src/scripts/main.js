@@ -21,11 +21,22 @@ const outlineArea = document.getElementById('outlineTextArea');
 const panelArea = document.getElementById('panelTextArea');
 const promptArea = document.getElementById('promptTextArea');
 
+//Image loading promise so it can be awaited
+const loadImage = src =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+});
+
 const SENDER_ID = Object.freeze({
     HUMAN: Symbol("user"),
     BOT: Symbol("bot"),
     ERROR: Symbol("err"),
 })
+
+//TODO: Add manga title input and chapter number selector.
 
 const genres = ["Romance", "Comedy", "Drama", "Action", "Fantasy", "School", "Supernatural",
   "Slice of Life", "Adventure", "Sci-Fi", "Mystery", "Historical", "Horror"];
@@ -134,6 +145,52 @@ function getBotReplyStream(message, type) {
   });
 }
 
+function getLines(ctx, text, maxWidth) {
+    let words = text.split(" ");
+    let lines = [];
+    let currentLine = words[0];
+
+    for (let i = 1; i < words.length; i++) {
+        let word = words[i];
+        let width = ctx.measureText(currentLine + " " + word).width;
+        
+        if (width < maxWidth) {
+            currentLine += " " + word;
+        } else {
+            lines.push(currentLine);
+            currentLine = word;
+        }
+    }
+    lines.push(currentLine);
+    
+    return lines;
+}
+
+function drawSpeechBubble(ctx, text, pos, maxWidth, maxHeight){
+  let padding = 10;
+  let bottomPadding = 40;
+  let fontSize = 30;
+
+  ctx.font = fontSize + "px Arial";
+  ctx.textAlign = "start";
+  ctx.textBaseline = "hanging";
+  let textWidth = ctx.measureText(text).width;
+  let lines = getLines(ctx, text, maxWidth - padding * 4);
+  let textHeight = lines.length * fontSize + padding * 2;
+  pos.y = maxHeight - textHeight - bottomPadding;
+  ctx.fillStyle = "#ffffff";
+  ctx.lineWidth = "4";
+  ctx.strokeStyle = "black"
+  ctx.fillRect(pos.x + padding, pos.y, maxWidth - padding * 2, textHeight);
+  ctx.strokeRect(pos.x + padding, pos.y, maxWidth - padding * 2, textHeight);
+
+  lines.forEach(line => {
+    ctx.fillStyle = "#000000";
+    ctx.fillText(line, pos.x + padding * 2, pos.y + padding);
+    pos.y += fontSize;
+  });
+}
+
 async function generateImages(message, type){  
   toggleInputDisable(true);
   let bubble = addMessage("", SENDER_ID.BOT);
@@ -158,12 +215,19 @@ async function generateImages(message, type){
   let imgContainer = document.createElement("div");
   imgContainer.className = "img-container";
   bubble.appendChild(imgContainer);  
+  
+  let canvas = document.createElement("canvas");
+  let imgWidth = 576;
+  let imgHeight = 1024;
+  canvas.width = imgWidth;
+  canvas.height = imgHeight;
+  let ctx = canvas.getContext("2d");
 
   try{
     for(let i = 0; i < prompts.length; i++){
       let prompt = prompts[i] + " in the style of manga black and white";
       let convo = convos[i];
-      let url = 'http://127.0.0.1:4500/' + type + '?' + 'param1=' + prompt;
+      let url = 'http://127.0.0.1:4500/' + type + '?' + 'param1=' + prompt + '&width=' + imgWidth + '&height=' + imgHeight;
       
       message = encodeURIComponent(message);
       await $.getJSON(url,
@@ -174,21 +238,28 @@ async function generateImages(message, type){
       }
       
       );
-      let img = new Image();
-      img.src = 'data:image/png;base64,' + returnData;
+      let src = 'data:image/png;base64,' + returnData;      
+      await loadImage(src).then(img => {
+        img.width = imgWidth;
+        img.height = imgHeight;
 
-      //Add text either here or in python
-      //Probably here using a canvas and then draw a rectangle with the text on it.
+        ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
+        drawSpeechBubble(ctx, convo, {x: 0, y: 0}, canvas.width, canvas.height);
+        img.src = canvas.toDataURL("image/png");
+        imgContainer.appendChild(img);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      });
 
-      imgContainer.appendChild(img);
     }
   }
   catch(err){
     deleteMessage(bubble);
-    console.log(error);
+    console.log(err);
     
     addMessage("Couldn't get response from bot.", SENDER_ID.ERROR);
   }
+  //Add button to download the images presumably.
   
   toggleInputDisable(false);
   return;
@@ -329,12 +400,7 @@ chatForm.addEventListener('submit', function (event) {
 
   const type = messageType.value;
   const message = userInput.value.trim();
-
-  // const characters = characterArea.value.trim();
-  // const synopsis = synopsisArea.value.trim()
-  // const outline = outlineArea.value.trim();
-  // const panels = panelArea.value.trim();
-
+  
   if (!message) {
     return;
   }
@@ -416,7 +482,7 @@ saveButton.addEventListener('click', function(){
 
 
 
-
+    //TODO: add manga name and chapter number information.
     let saveInfo = {
       "synopsis": contextInfo[0].value,
       "characters": contextInfo[1].value,
@@ -426,6 +492,7 @@ saveButton.addEventListener('click', function(){
       "prompts": contextInfo[4].value,
     };
 
+    //TODO: set the file name to name of manga generated.
     DownloadFile(JSON.stringify(saveInfo, null, 2), "storyInfo.json");
 });
 
@@ -443,14 +510,6 @@ function DownloadFile(jsonData, fileName){
 messageType.addEventListener("change", function(){
   const value = this.value;
   userInput.placeholder = inputPlaceholders[value];
-
-
-
-  // if(value == "manga" || value == "synopsis")
-  //   genreDiv.style.display = "flex";
-  // else
-  //   genreDiv.style.display = "none";
-
 });
 
 pasteContextButton.addEventListener('click', function(){
