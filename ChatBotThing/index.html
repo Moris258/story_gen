@@ -16,16 +16,25 @@
                     <img src="./src/assets/images/new-chat.png" alt="New Chat">
                     <span>New Chat</span>
                 </button>
+                
+
+                <div id="chapters-value">
+                    Chapters: <output id="amount">5</output>
+                </div>
+            
+                <input type="range" id="chapter-count-range" min="3" max="10" value="5" oninput="amount.value = this.value"/>
+                
+
                 <button id="context-button" aria-label="Context Enter" onclick="this.blur();">
                     <span>Context</span>
                 </button>
                 <div class="save-load-div" aria-label="Save or load buttons">
                     <input type="file" id="loadContextInput"/>
-                    <button id="load-button" title="Load Context" aria-label="Load Button" onclick="this.blur();">
+                    <button id="load-button" title="Load Settings" aria-label="Load Button" onclick="this.blur();">
                         <img src="./src/assets/images/load.png" alt="Load Context">
                     </button>
 
-                    <button id="save-button" title="Save Context" aria-label="Save Button" onclick="this.blur();">
+                    <button id="save-button" title="Save Settings" aria-label="Save Button" onclick="this.blur();">
                         <img src="./src/assets/images/save.png" alt="Save Context">
                     </button>
                 </div>
@@ -34,7 +43,10 @@
 
         <div class="container">
             <header>
-                <h1>Chat Bot Thing</h1>
+                <!--<h1>Chat Bot Thing</h1>-->
+                <div class="header">
+                    <textarea id="manga-name-text-input" value="Manga Title">Manga Title</textarea>
+                </div>
             </header>
 
             <section class="chat-container" aria-label="Chatbot interface">
@@ -70,6 +82,18 @@
             </section>
         </div>
 
+        <div id="imageModal" class="modal">
+            <div class="modal-content" id="imageModalContent">
+                <button id="lastImageButton" onclick="this.blur();" class="navigationButton">
+                    <-
+                </button>
+                <img id="imageModalImg" alt="Panel Image"/>
+                <button id="nextImageButton" onclick="this.blur();" class="navigationButton">
+                    ->
+                </button>
+            </div>
+        </div>
+
         <div id="contextModal" class="modal">
             <div class="modal-content">
                 <div class="modal-header">
@@ -93,6 +117,7 @@
 
         <script src="./src/scripts/jquery.js"></script>
         <script src="./src/scripts/main.js"></script>
+        <script src="./src/scripts/Stuk-jszip-643714a/dist/jszip.js"></script>
     </body>
 
 

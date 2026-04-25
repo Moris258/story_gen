@@ -11,8 +11,15 @@ const loadButton = document.getElementById('load-button');
 const pasteContextButton = document.getElementById('paste-context-button');
 
 const genreDiv = document.getElementById('genre-div');
+const mangaNameInput = document.getElementById('manga-name-text-input');
+const chapterCountInput = document.getElementById('chapter-count-range');
 
 const saveButton = document.getElementById('save-button');
+//Image Modal
+const imageModal = document.getElementById('imageModal');
+const imageModalImg = document.getElementById('imageModalImg');
+const lastImageButton = document.getElementById('lastImageButton');
+const nextImageButton = document.getElementById('nextImageButton');
 
 //Context text areas
 const synopsisArea = document.getElementById('synopsisTextArea');
@@ -191,6 +198,26 @@ function drawSpeechBubble(ctx, text, pos, maxWidth, maxHeight){
   });
 }
 
+const b64toBlob = (b64Data, contentType='', sliceSize=512) => {
+  const byteCharacters = atob(b64Data);
+  const byteArrays = [];
+
+  for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+    const slice = byteCharacters.slice(offset, offset + sliceSize);
+
+    const byteNumbers = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+      byteNumbers[i] = slice.charCodeAt(i);
+    }
+
+    const byteArray = new Uint8Array(byteNumbers);
+    byteArrays.push(byteArray);
+  }
+    
+  const blob = new Blob(byteArrays, {type: contentType});
+  return blob;
+}
+
 async function generateImages(message, type){  
   toggleInputDisable(true);
   let bubble = addMessage("", SENDER_ID.BOT);
@@ -222,6 +249,7 @@ async function generateImages(message, type){
   canvas.width = imgWidth;
   canvas.height = imgHeight;
   let ctx = canvas.getContext("2d");
+  let currImgIndex = 0;
 
   try{
     for(let i = 0; i < prompts.length; i++){
@@ -247,6 +275,26 @@ async function generateImages(message, type){
         drawSpeechBubble(ctx, convo, {x: 0, y: 0}, canvas.width, canvas.height);
         img.src = canvas.toDataURL("image/png");
         imgContainer.appendChild(img);
+        img.addEventListener('click', function showImageModal(){
+          imageModal.style.display = "flex";
+          imageModalImg.src = img.src;
+          imageModalImg.width = imgWidth/1.2;
+          imageModalImg.height = imgHeight/1.2;
+          currImgIndex = Array.prototype.indexOf.call(imgContainer.children, img);
+          lastImageButton.addEventListener('click', function lastImage(){
+            if(currImgIndex == 0) return;
+            currImgIndex--;
+                        
+            imageModalImg.src = imgContainer.getElementsByTagName("img").item(currImgIndex).src;
+          });
+          nextImageButton.addEventListener('click', function lastImage(){
+            let imgs = imgContainer.getElementsByTagName("img");
+            if(currImgIndex >= imgs.length - 1) return;
+            currImgIndex++;
+                        
+            imageModalImg.src = imgs.item(currImgIndex).src;
+          });
+        });
         chatMessages.scrollTop = chatMessages.scrollHeight;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       });
@@ -260,6 +308,41 @@ async function generateImages(message, type){
     addMessage("Couldn't get response from bot.", SENDER_ID.ERROR);
   }
   //Add button to download the images presumably.
+  let downloadButton = document.createElement("button");
+  downloadButton.className = "bot-message-button";
+  downloadButton.title = "Download Panels";
+  const buttonImage = document.createElement("img");
+  buttonImage.src = "src/assets/images/download.png";
+  downloadButton.appendChild(buttonImage);
+
+  
+  downloadButton.addEventListener('click', async function downloadPanels(){
+    //TODO: put the images in a zip and download
+    let images = imgContainer.getElementsByTagName("img");
+    let blobs = [];
+    for(let i = 0; i < images.length; i++){
+      let image = images.item(i);
+      let src = image.src;
+      let contentType = src.split("data:")[1].split(";base64,")[0];
+      let b64Data = src.split("base64,")[1];
+      let blob = b64toBlob(b64Data, contentType);
+      blobs.push(blob);
+    }
+    console.log(blobs);
+    
+    const zip = new JSZip();
+    blobs.forEach((blob, index) => {
+      zip.file('panel' + (index+1) + '.png', blob);
+    });
+
+    const res = await zip.generateAsync({type: 'blob'});
+    DownloadFile(res, "panels.zip");
+    
+    this.blur();
+  });
+  bubble.innerHTML += "<hr>";
+  bubble.appendChild(downloadButton);
+
   
   toggleInputDisable(false);
   return;
@@ -292,10 +375,12 @@ async function getBotReply(message, type){
       url += checkbox.value + ", ";
     }
   }
-  //console.log(url);
 
 
   switch(type){
+    case 'manga':
+      url += '&scenes=' + chapterCountInput.value;
+      break;
     case "panels":
       url += '&synopsis=' + synopsisArea.value;
       url += '&characters=' + characterArea.value;
@@ -307,6 +392,7 @@ async function getBotReply(message, type){
     case "outline":
       url += '&synopsis=' + synopsisArea.value;
       url += '&characters=' + characterArea.value;
+      url += '&scenes=' + chapterCountInput.value;
       break;
     case "prompts":
       url += '&characters=' + characterArea.value;
@@ -343,7 +429,7 @@ async function getBotReply(message, type){
     let copy_button = document.createElement("button");
     copy_button.className = "bot-message-button";
     copy_button.id = type;
-    copy_button.title = "Copy to context."
+    copy_button.title = "Copy to context"
     copy_button.addEventListener('click', function copyToContext(){
       switch(this.id){
         case "synopsis":
@@ -372,7 +458,7 @@ async function getBotReply(message, type){
       this.blur();
     });
     let button_img = document.createElement("img");
-    button_img.src = "./src/assets/images/copy.png";
+    button_img.src = "src/assets/images/copy.png";
     copy_button.appendChild(button_img);
 
     bubble.innerHTML += "<hr>";
@@ -428,8 +514,9 @@ closeContextModal.onclick = function() {
 };
 
 window.onclick = function(event) {
-  if (event.target == contextModal) {
+  if (event.target == contextModal || event.target == imageModal) {
     contextModal.style.display = "none";
+    imageModal.style.display = "none";
   }
 };
 
@@ -452,6 +539,8 @@ loadContextInput.addEventListener("change", async function (){
   outlineArea.value = jsonContent["outline"];
   panelArea.value = jsonContent["panels"];
   promptArea.value = jsonContent["prompts"];
+  mangaNameInput.value = jsonContent["name"];
+  chapterCountInput.value = jsonContent["chapters"]
   let genres = jsonContent["genres"];
   let checkboxes = genreDiv.getElementsByTagName("input");
   for(let i = 0; i < checkboxes.length; i++){
@@ -480,10 +569,10 @@ saveButton.addEventListener('click', function(){
       }
     }
 
-
-
     //TODO: add manga name and chapter number information.
     let saveInfo = {
+      "name": mangaNameInput.value,
+      "chapters": chapterCountInput.value,
       "synopsis": contextInfo[0].value,
       "characters": contextInfo[1].value,
       "outline": contextInfo[2].value,
@@ -493,18 +582,20 @@ saveButton.addEventListener('click', function(){
     };
 
     //TODO: set the file name to name of manga generated.
-    DownloadFile(JSON.stringify(saveInfo, null, 2), "storyInfo.json");
+    let blobData = new Blob([JSON.stringify(saveInfo, null, 2)], {
+      type: "text/plain"
+    });
+    DownloadFile(blobData, saveInfo["name"] + ".json");
 });
 
-function DownloadFile(jsonData, fileName){
+function DownloadFile(data, fileName){
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([jsonData], {
-      type: "text/plain"
-    }));
+    a.href = URL.createObjectURL(data);
     a.setAttribute("download", fileName);
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
 };
 
 messageType.addEventListener("change", function(){

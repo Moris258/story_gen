@@ -215,6 +215,7 @@ CHARACTER_AGENT_SYSTEM_PROMPT = """
 
 OUTLINE_AGENT_SYSTEM_PROMPT = """
     Pretend that you are a writer creating a general outline for a manga. Base the outline on the provided synopsis in the user's prompt.
+    Generate an amount of scenes equal to the requested amount in the user's prompt if it is specified.
     The outline should include characters also provided in the user's prompt. The outline should be in a structured format, with clear sections and bullet points for each part of the story.
     Also include information about which characters are present for each scene. Include information about the scene setting. Include only one specific setting, not an option between two or more.
     Generate the scene outlines one by one.
@@ -461,11 +462,12 @@ def run_prompt_gen():
 @app.route("/manga")
 def create_manga():
     req = request.args.get("param1", "")
-    genres = request.args.get("genres", "");
+    scenes = request.args.get("scenes", "5")
+    genres = request.args.get("genres", "")
     if(genres != ""):
         req += " genres: " + genres
     print("Creating manga from prompt: " + req)
-    pipe, lora_model = load_synopsis_model();
+    pipe, lora_model = load_synopsis_model()
 
     synopsis = generate_synopsis(req, pipe)
 
@@ -478,7 +480,7 @@ def create_manga():
     })["messages"][-1].content
 
     outline = outline_agent.invoke({
-        "messages": [HumanMessage(content=f"Synopsis: {synopsis}\nCharacters: {characters}")]
+        "messages": [HumanMessage(content=f"Synopsis: {synopsis}\nCharacters: {characters}\nScenes: {scenes}")]
     })["messages"][-1].content
 
     panels = generate_story_panels(outline, synopsis, characters, genres)
@@ -522,13 +524,14 @@ def run_character_agent():
 @app.route("/outline")
 def run_outline_agent():
     synopsis = request.args.get("param1", "")
+    scenes = request.args.get("scenes", "5")
     characters = request.args.get("characters", "")
 
     print("Outline agent invoked with input: " + synopsis)
 
     
     response = outline_agent.invoke({
-        "messages": [HumanMessage(content=f"Characters: {characters}\nSynopsis: {synopsis}")]}
+        "messages": [HumanMessage(content=f"Synopsis: {synopsis}\nCharacters: {characters}\nScenes: {scenes}")]}
     )
     return jsonify(response["messages"][-1].content)
 

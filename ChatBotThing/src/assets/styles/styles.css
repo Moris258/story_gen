@@ -57,9 +57,54 @@ body {
   justify-content: center;
   gap: 12px;
 }
+
 .toolbar button{
-    padding: 10px;;
+  padding: 10px;;
 }
+
+.toolbar #chapters-value{
+  text-align: center;
+  font-size: 18px;
+}
+
+.toolbar input[type="range"]{
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+  padding-bottom: 6px;
+}
+
+.toolbar input[type="range"]::-webkit-slider-runnable-track {
+  background: var(--button-background);
+  border-radius: 5px;
+  height: 0.5rem;
+}
+
+.toolbar input[type="range"]::-moz-range-track {
+  background: var(--button-background);
+  border-radius: 6px;
+  height: 0.5rem;
+}
+
+.toolbar input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 6px;
+  margin-top: -4px;
+  background-color: var(--chat-text-color-dark);
+  height: 1rem;
+  width: 1rem;    
+}
+
+.toolbar input[type="range"]::-moz-range-thumb {
+  border: none;
+  border-radius: 6px;
+  background-color: var(--chat-text-color-dark);
+  height: 1rem;
+  width: 1rem;
+}
+
+
 
 .toolbar button img {
     width: 36px;
@@ -77,6 +122,21 @@ header h1 {
   font-size: clamp(2rem, 2.5vw, 2.75rem);
   text-align: center;
   color:var(--header-color)
+}
+
+.header{
+  text-align: center;
+  padding: 10px;
+}
+
+header #manga-name-text-input{
+  text-align: center;
+  width: 50rem;
+  font-size: 30px;
+  padding: 10px;
+  border-style: 1px solid var(--border-color);
+  background-color: var(--background-color);
+  border-radius: 14px;
 }
 
 .chat-container {
@@ -140,6 +200,10 @@ header h1 {
   grid-template-columns: auto auto;
   justify-content: flex-start;
   gap: 4px;
+}
+
+.img-container img:hover{
+  cursor: pointer;
 }
 
 .message.bot .img-container img{
@@ -255,6 +319,7 @@ textarea {
   flex: 1;
   padding: 14px 0px 14px 16px;
   max-height: 350px;
+  max-width: 668px;
   border-bottom-right-radius: 0px;
   border-top-right-radius: 0px;
 }
@@ -337,6 +402,32 @@ button > span {
   max-height: 100%;  
 }
 
+#imageModal{
+  background-color: rgb(0,0,0); /* Fallback color */
+  background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+  width: 100%;
+  height: 100%;
+  position: fixed;
+}
+
+#imageModalContent{
+  display: flex;
+  width: auto;
+  height: fit-content;
+  margin: 1% auto;
+  background-color:transparent;
+  border: none;
+  align-items: stretch;
+  justify-content: center;
+  flex-direction: row;
+}
+
+.navigationButton{
+  width: 6rem;
+  background-color: transparent;
+  border-radius: 0px;
+}
+
 @-webkit-keyframes fadeIn {
   from {opacity: 0}
   to {lopacity: 1}
@@ -354,11 +445,9 @@ button > span {
   border: 1px solid var(--border-color);
   width: 80%;
   overflow: auto;
-  animation-name: fadeIn
-;
+  animation-name: fadeIn;
   animation-duration: 0.4s;
-  -webkit-animation-name: fadeIn
-;
+  -webkit-animation-name: fadeIn;
   -webkit-animation-duration: 0.4s;
   border-radius: 14px;
 }
