@@ -28,6 +28,11 @@ const outlineArea = document.getElementById('outlineTextArea');
 const panelArea = document.getElementById('panelTextArea');
 const promptArea = document.getElementById('promptTextArea');
 
+
+let currImgIndex = 0;
+let imgWidth = 576;
+let imgHeight = 1024;
+
 //Image loading promise so it can be awaited
 const loadImage = src =>
   new Promise((resolve, reject) => {
@@ -244,21 +249,19 @@ async function generateImages(message, type){
   bubble.appendChild(imgContainer);  
   
   let canvas = document.createElement("canvas");
-  let imgWidth = 576;
-  let imgHeight = 1024;
   canvas.width = imgWidth;
   canvas.height = imgHeight;
   let ctx = canvas.getContext("2d");
-  let currImgIndex = 0;
 
   try{
     for(let i = 0; i < prompts.length; i++){
       let prompt = prompts[i] + " in the style of manga black and white";
       let convo = convos[i];
-      let url = 'http://127.0.0.1:4500/' + type + '?' + 'param1=' + prompt + '&width=' + imgWidth + '&height=' + imgHeight;
+      let url = 'http://127.0.0.1:4500/' + type;
+      let args = {"param1": prompt, "width": imgWidth, "height": imgHeight};
       
       message = encodeURIComponent(message);
-      await $.getJSON(url,
+      await $.post(url, args,
       function(data, textStatus, jqXHR) {
         returnData = data;
       
@@ -272,29 +275,10 @@ async function generateImages(message, type){
         img.height = imgHeight;
 
         ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
-        drawSpeechBubble(ctx, convo, {x: 0, y: 0}, canvas.width, canvas.height);
+        if(convo.trim() != "")
+          drawSpeechBubble(ctx, convo, {x: 0, y: 0}, canvas.width, canvas.height);
         img.src = canvas.toDataURL("image/png");
         imgContainer.appendChild(img);
-        img.addEventListener('click', function showImageModal(){
-          imageModal.style.display = "flex";
-          imageModalImg.src = img.src;
-          imageModalImg.width = imgWidth/1.2;
-          imageModalImg.height = imgHeight/1.2;
-          currImgIndex = Array.prototype.indexOf.call(imgContainer.children, img);
-          lastImageButton.addEventListener('click', function lastImage(){
-            if(currImgIndex == 0) return;
-            currImgIndex--;
-                        
-            imageModalImg.src = imgContainer.getElementsByTagName("img").item(currImgIndex).src;
-          });
-          nextImageButton.addEventListener('click', function lastImage(){
-            let imgs = imgContainer.getElementsByTagName("img");
-            if(currImgIndex >= imgs.length - 1) return;
-            currImgIndex++;
-                        
-            imageModalImg.src = imgs.item(currImgIndex).src;
-          });
-        });
         chatMessages.scrollTop = chatMessages.scrollHeight;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       });
@@ -306,7 +290,12 @@ async function generateImages(message, type){
     console.log(err);
     
     addMessage("Couldn't get response from bot.", SENDER_ID.ERROR);
+    return null;
   }
+  
+
+
+
   //Add button to download the images presumably.
   let downloadButton = document.createElement("button");
   downloadButton.className = "bot-message-button";
@@ -317,7 +306,6 @@ async function generateImages(message, type){
 
   
   downloadButton.addEventListener('click', async function downloadPanels(){
-    //TODO: put the images in a zip and download
     let images = imgContainer.getElementsByTagName("img");
     let blobs = [];
     for(let i = 0; i < images.length; i++){
@@ -345,143 +333,183 @@ async function generateImages(message, type){
 
   
   toggleInputDisable(false);
-  return;
+  return bubble;
 }
 
-async function getBotReply(message, type){
+async function getBotReply(message, type, generateBubble = true){
   console.log("Getting bot reply for message: " + message);
-  message = encodeURIComponent(message);
+  // message = encodeURIComponent(message);
 
-  //When generating images, call every prompt 1 by 1 from here somewhere so they show up continously
 
   toggleInputDisable(true);
   let response = "...";
   let returnData = "...";
-  let bubble = addMessage(response, SENDER_ID.BOT);
+  let args = {};
+  let bubble = null;
+  if(generateBubble)
+    bubble = addMessage(response, SENDER_ID.BOT);
   let url = 'http://127.0.0.1:4500/' + type + '?';
   if(message)
-    url += 'param1=' + message;
+    args["param1"] = message;
 
 
   let checkboxes = genreDiv.getElementsByTagName("input");
-  let oneChecked = false;
   for(let i = 0; i < checkboxes.length; i++){
     let checkbox = checkboxes.item(i);
     if(checkbox.checked){
-      if(!oneChecked){
-        oneChecked = true;
-        url += '&genres=';
-      }
-      url += checkbox.value + ", ";
+      args["genres"] += checkbox.value + ", ";
     }
   }
 
 
   switch(type){
     case 'manga':
-      url += '&scenes=' + chapterCountInput.value;
+      args["scenes"] = chapterCountInput.value;
       break;
     case "panels":
-      url += '&synopsis=' + synopsisArea.value;
-      url += '&characters=' + characterArea.value;
-      url += '&outline=' + outlineArea.value;
+      args["synopsis"] = synopsisArea.value;
+      args["characters"] = characterArea.value;
+      args["outline"] = outlineArea.value;
       break;
     case "characters":
-      url += '&synopsis=' + synopsisArea.value;
+      args["synopsis"] = synopsisArea.value;
       break;
     case "outline":
-      url += '&synopsis=' + synopsisArea.value;
-      url += '&characters=' + characterArea.value;
-      url += '&scenes=' + chapterCountInput.value;
+      args["synopsis"] = synopsisArea.value;
+      args["characters"] = characterArea.value;
+      args["scenes"] = chapterCountInput.value;
       break;
     case "prompts":
-      url += '&characters=' + characterArea.value;
-      url += '&panels=' + panelArea.value;
+      args["characters"] = characterArea.value;
       break;
   }
   
 
   try{
-    await $.getJSON(url,
-      function(data, textStatus, jqXHR) {
-        returnData = data;
-      
-        if(type != "manga")
+    await $.post(url, args, function(data){
+      returnData = data;
+      if(type != "manga")
           response = returnData.replace(/\n/g, "<br>");
+    })
+    
+    // else{
+    //   await $.getJSON(url,
+    //     function(data, textStatus, jqXHR) {
+    //       returnData = data;
+        
+    //       if(type != "manga")
+    //         response = returnData.replace(/\n/g, "<br>");
+
+    //     }
+    //   );
+    // }
+
+    // if(type == "manga"){
+    //   synopsisArea.value = returnData.synopsis;
+    //   characterArea.value = returnData.characters;
+    //   outlineArea.value = returnData.outline;
+    //   panelArea.value = returnData.panels;
+    //   promptArea.value = returnData.prompts;
+    //   deleteMessage(bubble);
+
+
+    //   generateImages(returnData.prompts, "image")
+    //   return "";
+    // }
+
+
+
+    if(generateBubble){
+      bubble.innerHTML = response;
+      let copy_button = document.createElement("button");
+      copy_button.className = "bot-message-button";
+      copy_button.id = type;
+      copy_button.title = "Copy to context"
+      copy_button.addEventListener('click', function copyToContext(){
+        switch(this.id){
+          case "synopsis":
+            synopsisArea.value = returnData;
+            break;
+          case "characters":
+            characterArea.value = returnData;
+            break;
+          case "outline":
+            outlineArea.value = returnData;
+            break;
+          case "panels":
+            panelArea.value = returnData;
+            break;
+          case "prompts":
+            promptArea.value = returnData;
+            break;
+          default:
+            navigator.clipboard.writeText(returnData).then(function(){
+                console.log("Successfully copied to clipboard!");
+            }, function(err){
+                console.log("Failed to copy to clipboard." + err);
+            });
+            break;
         }
-    );
-    if(type == "manga"){
-      synopsisArea.value = returnData.synopsis;
-      characterArea.value = returnData.characters;
-      outlineArea.value = returnData.outline;
-      panelArea.value = returnData.panels;
-      promptArea.value = returnData.prompts;
-      deleteMessage(bubble);
-
-
-      generateImages(returnData.prompts, "image")
-      return;
+        this.blur();
+      });
+      let button_img = document.createElement("img");
+      button_img.src = "src/assets/images/copy.png";
+      copy_button.appendChild(button_img);
+  
+      bubble.innerHTML += "<hr>";
+      bubble.appendChild(copy_button);
     }
-
-
-
-    bubble.innerHTML = response;
-    let copy_button = document.createElement("button");
-    copy_button.className = "bot-message-button";
-    copy_button.id = type;
-    copy_button.title = "Copy to context"
-    copy_button.addEventListener('click', function copyToContext(){
-      switch(this.id){
-        case "synopsis":
-          synopsisArea.value = returnData;
-          break;
-        case "characters":
-          characterArea.value = returnData;
-          break;
-        case "outline":
-          outlineArea.value = returnData;
-          break;
-        case "panels":
-          panelArea.value = returnData;
-          break;
-        case "prompts":
-          promptArea.value = returnData;
-          break;
-        default:
-          navigator.clipboard.writeText(returnData).then(function(){
-              console.log("Successfully copied to clipboard!");
-          }, function(err){
-              console.log("Failed to copy to clipboard." + err);
-          });
-          break;
-      }
-      this.blur();
-    });
-    let button_img = document.createElement("img");
-    button_img.src = "src/assets/images/copy.png";
-    copy_button.appendChild(button_img);
-
-    bubble.innerHTML += "<hr>";
-    bubble.appendChild(copy_button);
   }
   catch(error){
-    deleteMessage(bubble);
+    if(generateBubble)
+      deleteMessage(bubble);
     console.log(error);
     
     addMessage("Couldn't get response from bot.", SENDER_ID.ERROR);
+    return "";
   }
-
 
 
 
   toggleInputDisable(false);
+  return returnData;
 }
 
 function getBotReplyDummy(message){
   addMessage("You wrote: " + message, SENDER_ID.BOT);
 }
 
-chatForm.addEventListener('submit', function (event) {
+function addImgClickListeners(bubble){
+  if(bubble == null) return;
+  let imgContainer = bubble.getElementsByClassName("img-container").item(0);
+  let imgs = imgContainer.getElementsByTagName("img");
+  for(let i = 0; i < imgs.length; i++){
+    let img = imgs.item(i);    
+
+    img.addEventListener('click', function showImageModal(){
+      imageModal.style.display = "flex";
+      imageModalImg.src = img.src;
+      imageModalImg.width = imgWidth/1.2;
+      imageModalImg.height = imgHeight/1.2;
+      currImgIndex = Array.prototype.indexOf.call(imgContainer.children, img);
+      lastImageButton.addEventListener('click', function lastImage(){
+        if(currImgIndex == 0) return;
+        currImgIndex--;
+        let imgs = imgContainer.getElementsByTagName("img");
+                    
+        imageModalImg.src = imgs.item(currImgIndex).src;
+      });
+      nextImageButton.addEventListener('click', function lastImage(){
+        if(currImgIndex >= imgs.length - 1) return;
+        currImgIndex++;
+                    
+        imageModalImg.src = imgs.item(currImgIndex).src;
+      });
+    });
+  }
+}
+
+chatForm.addEventListener('submit', async function (event) {
   event.preventDefault();
 
   const type = messageType.value;
@@ -494,8 +522,52 @@ chatForm.addEventListener('submit', function (event) {
   addMessage(message, SENDER_ID.HUMAN);
   userInput.value = '';
   userInput.focus();
-  if(type == "image" || type == "image_dummy")
-    generateImages(message, type)
+  if(type == "image" || type == "image_dummy"){
+    let bubble = await generateImages(message, type);
+    addImgClickListeners(bubble);
+    
+  }
+  else if(type == "manga"){
+    let bubble = addMessage("Generating synopsis from prompt...", SENDER_ID.BOT);
+    let data = "";
+    // data = await getBotReply(message, "synopsis", false);
+    // if(data == ""){
+    //   deleteMessage(bubble);
+    //   return;
+    // }
+    // synopsisArea.value = data;
+    bubble.innerHTML += "<br><br>Generating characters...";
+    data = await getBotReply(synopsisArea.value, "characters", false);
+    if(data == ""){
+      deleteMessage(bubble);
+      return;
+    }
+    characterArea.value = data;
+    bubble.innerHTML += "<br><br>Generating outline...";
+    data = await getBotReply(synopsisArea.value, "outline", false);
+    if(data == ""){
+      deleteMessage(bubble);
+      return;
+    }
+    outlineArea.value = data;
+    bubble.innerHTML += "<br><br>Generating story panels...";
+    data = await getBotReply(outlineArea.value, "panels", false);
+    if(data == ""){
+      deleteMessage(bubble);
+      return;
+    }
+    panelArea.value = data;
+    bubble.innerHTML += "<br><br>Generating image prompts...";
+    data = await getBotReply(panelArea.value, "prompts", false);
+    if(data == ""){
+      deleteMessage(bubble);
+      return;
+    }
+    promptArea.value = data;
+    deleteMessage(bubble);
+    bubble = await generateImages(message, type);
+    addImgClickListeners(bubble);
+  }
   else
     getBotReply(message, type);
 

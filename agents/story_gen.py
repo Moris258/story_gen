@@ -226,9 +226,10 @@ OUTLINE_AGENT_SYSTEM_PROMPT = """
             Bullet Points:
                 *"first bullet point for scene"
                 *"second bullet point for scene"
-            etc.
+                etc.
     The outline should be detailed enough to provide a clear roadmap for writing the manga, but it should not include any actual story content or dialogue.
     Focus on creating a high-level overview of the story's structure and key elements based on the provided synopsis and characters.
+    Every scene should have atleast 3 bullet points.
     Return the generated outline as a list of strings, with each string representing a section of the outline.
     Return only the outline, do not generate any extra text.
 """
@@ -407,9 +408,9 @@ def generate_story_panels(outline: str, synopsis: str, characters: str, genres: 
         scene_setting = scene[scene_setting_index + len("Setting: "):scene_characters_index]
         scene_characters = scene[scene_characters_index + len("Characters: "):bullet_points_index]
         bullet_points = scene[scene_characters_index:].split("* ")[1:]
-        print(scene_characters)
-        print(scene_setting)
-        print(bullet_points)
+        # print(scene_characters)
+        # print(scene_setting)
+        # print(bullet_points)
 
 
         future_scenes = ""
@@ -420,7 +421,7 @@ def generate_story_panels(outline: str, synopsis: str, characters: str, genres: 
             future_bullet_points_index = future_scene.index("Bullet Points") + len("Bullet Points:\n")
             future_bullet_points += future_scene[future_bullet_points_index:]
 
-        print(future_bullet_points)
+        # print(future_bullet_points)
 
         
         scene_characters = character_detect_agent.invoke({
@@ -453,17 +454,17 @@ def generate_prompts(panels: str, characters: str) -> str:
 
 @app.route("/help")
 def run_prompt_gen():
-    req = request.args.get("param1", "")
+    req = request.form.get("param1", "")
     print("Helping with prompt: " + req)
     return jsonify(help_agent.invoke({
         "messages": [HumanMessage(content=req)]
     })["messages"][-1].content)
 
-@app.route("/manga")
+@app.route("/manga", methods=['GET', 'POST'])
 def create_manga():
-    req = request.args.get("param1", "")
-    scenes = request.args.get("scenes", "5")
-    genres = request.args.get("genres", "")
+    req = request.form.get("param1", "")
+    scenes = request.form.get("scenes", "5")
+    genres = request.form.get("genres", "")
     if(genres != ""):
         req += " genres: " + genres
     print("Creating manga from prompt: " + req)
@@ -493,10 +494,10 @@ def create_manga():
 
 
 
-@app.route("/synopsis")
+@app.route("/synopsis", methods=['GET', 'POST'])
 def run_synopsis_gen():
-    req = request.args.get("param1", "")
-    genres = request.args.get("genres", "");
+    req = request.form.get("param1", "")
+    genres = request.form.get("genres", "");
     if(genres != ""):
         req += " genres: " + genres
 
@@ -511,9 +512,9 @@ def run_synopsis_gen():
 
     return jsonify(synopsis)
 
-@app.route("/characters")
+@app.route("/characters", methods=['GET', 'POST'])
 def run_character_agent():
-    synopsis = request.args.get("param1", "")
+    synopsis = request.form.get("param1", "")
     print("Character agent invoked with input: " + synopsis)
     
     response = character_agent.invoke({
@@ -521,11 +522,11 @@ def run_character_agent():
     )
     return jsonify(response["messages"][-1].content)
 
-@app.route("/outline")
+@app.route("/outline", methods=['GET', 'POST'])
 def run_outline_agent():
-    synopsis = request.args.get("param1", "")
-    scenes = request.args.get("scenes", "5")
-    characters = request.args.get("characters", "")
+    synopsis = request.form.get("param1", "")
+    scenes = request.form.get("scenes", "5")
+    characters = request.form.get("characters", "")
 
     print("Outline agent invoked with input: " + synopsis)
 
@@ -535,29 +536,29 @@ def run_outline_agent():
     )
     return jsonify(response["messages"][-1].content)
 
-@app.route("/panels")
+@app.route("/panels", methods=['GET', 'POST'])
 def run_manager_agent():
-    outline = request.args.get("param1", "")
-    genres = request.args.get("genres", "");
-    synopsis = request.args.get("synopsis", "")
-    characters = request.args.get("characters", "")
+    outline = request.form.get("param1", "")
+    genres = request.form.get("genres", "");
+    synopsis = request.form.get("synopsis", "")
+    characters = request.form.get("characters", "")
 
     print("Manager agent invoked with input: " + outline)
 
     story = generate_story_panels(outline, synopsis, characters, genres)
     return jsonify(story)
 
-@app.route("/prompts")
+@app.route("/prompts", methods=['GET', 'POST'])
 def run_prompt_agent():
-    panels = request.args.get("param1", "")
-    characters = request.args.get("characters", "")
+    panels = request.form.get("param1", "")
+    characters = request.form.get("characters", "")
     print("Prompt manager invoked with input: " + panels)
 
     response = generate_prompts(panels, characters)
     
     return jsonify(response)
 
-@app.route("/image_dummy")
+@app.route("/image_dummy", methods=['GET', 'POST'])
 def dummy_image():
     
     image = Image.open("Images/image.png")
@@ -569,11 +570,11 @@ def dummy_image():
 
     return jsonify(img_b64)
 
-@app.route("/image")
+@app.route("/image", methods=['GET', 'POST'])
 def run_image_agent():
-    image_prompt = request.args.get("param1", "")
-    width = request.args.get("width", "576")
-    height = request.args.get("height", "1024")
+    image_prompt = request.form.get("param1", "")
+    width = request.form.get("width", "576")
+    height = request.form.get("height", "1024")
     print("Image generator invoked with input: " + image_prompt)
     image = client.text_to_image(
         image_prompt,
@@ -588,12 +589,12 @@ def run_image_agent():
 
     return jsonify(img_b64)
 
-@app.route("/bot_response_stream")
+@app.route("/bot_response_stream", methods=['GET', 'POST'])
 def run_manager_agent_stream():
-    print("Manager agent invoked with input: " + request.args.get("param1", ""))
+    print("Manager agent invoked with input: " + request.form.get("param1", ""))
 
     # response = manager_agent.invoke({
-    #     "messages": [HumanMessage(content=request.args.get("param1", ""))]},
+    #     "messages": [HumanMessage(content=request.form.get("param1", ""))]},
     #     context=InputData(
     #         synopsis=synopsis,
     #         characters=characters,
@@ -603,7 +604,7 @@ def run_manager_agent_stream():
     
     def generate():
         for token, metadata in manager_agent.stream(
-            {"messages": [HumanMessage(content=request.args.get("param1", ""))]},
+            {"messages": [HumanMessage(content=request.form.get("param1", ""))]},
             stream_mode="messages",
             context=InputData(
                 synopsis=synopsis,
