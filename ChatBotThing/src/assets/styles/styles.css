@@ -398,7 +398,7 @@ button > span {
   z-index: 1;
   left: 0;
   top: 0;
-  width: 50%;
+  width: 100%;
   max-height: 100%;  
 }
 
@@ -441,10 +441,10 @@ button > span {
 .modal-content {
   position: relative;
   background-color: var(--background-color);
-  margin: 15% auto;
-  border: 1px solid var(--border-color);
-  width: 80%;
+  margin: 10% auto;
   overflow: auto;
+  border: 1px solid var(--border-color);
+  width: 50%;
   animation-name: fadeIn;
   animation-duration: 0.4s;
   -webkit-animation-name: fadeIn;

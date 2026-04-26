@@ -293,9 +293,6 @@ async function generateImages(message, type){
     return null;
   }
   
-
-
-
   //Add button to download the images presumably.
   let downloadButton = document.createElement("button");
   downloadButton.className = "bot-message-button";
