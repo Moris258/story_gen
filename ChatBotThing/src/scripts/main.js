@@ -609,7 +609,7 @@ loadContextInput.addEventListener("change", async function (){
   panelArea.value = jsonContent["panels"];
   promptArea.value = jsonContent["prompts"];
   mangaNameInput.value = jsonContent["name"];
-  chapterCountInput.value = jsonContent["chapters"]
+  chapterCountInput.value = jsonContent["chapters"];
   let genres = jsonContent["genres"];
   let checkboxes = genreDiv.getElementsByTagName("input");
   for(let i = 0; i < checkboxes.length; i++){

@@ -11,6 +11,8 @@ from langgraph.types import Command
 from flask import Flask, Response, json, request, stream_with_context
 from flask_cors import CORS
 from flask import jsonify
+import torch
+from diffusers.pipelines.flux2.pipeline_flux2_klein import Flux2KleinPipeline
 import io
 import base64
 from PIL import Image
@@ -43,6 +45,13 @@ def load_synopsis_model() -> tuple[Pipeline, PeftModel]:
     )
     return pipe, lora_loaded_model
 
+def load_image_model():
+    dtype = torch.bfloat16
+
+    pipe = Flux2KleinPipeline.from_pretrained("black-forest-labs/FLUX.2-klein-4B", torch_dtype=dtype)
+    pipe.enable_model_cpu_offload()
+    return pipe
+
 def generate_synopsis(input: str, pipe: Pipeline):
     messages = [
         {"role": "system", "content": "You are a helpful assistant that creates manga synopses based on the given description. The generated synopsis should be at least 500 characters."},
@@ -65,34 +74,6 @@ story = ""
 
 #load model
 model = ChatOllama(model="llama3.1")
-
-synopsis = """
-The manga centers on a girl named Mio who is lonely because she has no friends. One day, she finds a boy at her school named Kuroe who is in the same boat as her. Kuroe can see and communicate with spirits, and he tells Mio that she can also see them. He offers to help her deal with them, but then tells her he has to leave school due to bullies. Mio wants to help Kuroe, but he tells her to stay away from the bullies. Then one day, aspirit appears to Mio and tells her that Kuroe is in danger.
-"""
-
-
-characters = """
-    Mio Katsuragi: Personality traits: introverted, responsible, determined Connection to other characters: main protagonist, friends with Kuroe
-    Kuroe Shinoda: Personality traits: quiet, observant, empathetic Connection to Mio: helps her deal with spirits, warns her about bullies
-    Akira Matsumoto: Personality traits: hot-headed, aggressive, intimidating Connection to other characters: bully who targets Kuroe, rival of the main antagonist
-    Sakura Tanaka: Personality traits: kind-hearted, gentle, friendly Connection to Mio: new friend at school who becomes a confidant for Mio
-    Rina Yamada: Personality traits: bubbly, energetic, mischievous Connection to other characters: rival of Sakura in Mio's class, initially oblivious to the supernatural events
-    Kaito Nakahara: Personality traits: charismatic, confident, manipulative Connection to Kuroe: former friend who becomes a bully due to his own struggles with spirits
-    Hiroshi Inoue: Personality traits: calm, wise, mysterious Connection to other characters: spirit guide for Mio and Kuroe, provides cryptic advice
-    others: various classmates, teachers, and spirits that interact with the main characters throughout the story
-"""
-
-outline = """
-    Introduce protagonist Mio Katsuragi, a lonely girl who has no friends at school.
-    Show Mio's daily life as an outcast, highlighting her struggles to connect with others.
-    Introduce supporting character Sakura Tanaka, who becomes the first person to show kindness towards Mio.
-    Introduce Kuroe Shinoda, a boy who can see and communicate with spirits.
-    Show Kuroe's unique abilities as he helps Mio deal with her newfound awareness of spirits.
-    Introduce antagonist Kaito Nakahara, who is struggling to control his own spirit presence.
-    Set up conflict between Kuroe and Kaito, foreshadowing the danger that Kuroe will soon face.
-"""
-
-genres = "supernatural, school, drama"
 
 MANAGER_AGENT_PROMPT = """
     Pretend you are a writer creating a manga. Based on the provided bullet point, generate the story.
@@ -146,10 +127,10 @@ CHARACTER_DETECT_AGENT = """
 
 @dataclass
 class InputData:
-    synopsis: str = synopsis
-    characters: str = characters
-    outline: str = outline
-    genres: str = genres
+    synopsis: str = ""
+    characters: str = ""
+    outline: str = ""
+    genres: str = ""
 
 class StoryState(AgentState):
     text: str
@@ -265,6 +246,7 @@ PANEL_PROMPT_AGENT_SYSTEM_PROMPT = """
     You are a helpful agent that creates prompts to generate images through image generation software.
     You are given a panel that contains the scene description of that panel.
     You are also given a series of character descriptions including their physical description.
+    You are also given the last prompt generated, which you can use to maintain consistency in the generated images.
     Based on the scene description and the character's physical description, generate a prompt for the panel that could
     be used to generate an image. The prompt should be about a maximum of 2 sentences.
     Structure the message as such:
@@ -272,26 +254,10 @@ PANEL_PROMPT_AGENT_SYSTEM_PROMPT = """
         Prompt: "the image prompt"
     If you encounter a character not included in the prompt, generate an appearance for them and use that same appearance going forward.
     Do not include character names, instead replace them with their physical description.
+    Do not include any characters that aren't present in the scene description.
     In the prompt, do not include information about character conversations.
     Return only the prompts with no extra text.
 """
-
-
-panels = """
-Panel 1:
-Scene description: A shot of Mio walking down the empty hallway of her school, looking lost in thought. Her backpack is slumped over one shoulder, and she seems to be avoiding eye contact with anyone.
-Mio (thought bubble): I hate coming here every day. Everyone's so mean, and they don't care that I'm just sitting there, trying not to get noticed.
-
-Panel 2:
-Scene description: Mio sits alone at a table in the school cafeteria, eating her lunch while staring down at her plate.
-Mio (thought bubble): Why can't anyone talk to me? Don't they know I'm not so bad?
-
-Panel 3:
-Scene description: The cafeteria falls silent as students start to gather around their lockers. Mio's eyes follow them, feeling like an outcast.
-Mio (sighs): Just another day...
-"""
-
-
 
 @tool
 def generate_characters(synopsis: str) -> str:
@@ -333,14 +299,14 @@ character_detect_agent = create_agent(
     system_prompt=CHARACTER_DETECT_AGENT
 )
 
-manager_agent = create_agent(
-    model = model,
-    name="manager_agent",
-    system_prompt=MANAGER_AGENT_PROMPT,
-    tools=[update_story, get_story],
-    context_schema=InputData,
-    state_schema=StoryState,
-)
+# manager_agent = create_agent(
+#     model = model,
+#     name="manager_agent",
+#     system_prompt=MANAGER_AGENT_PROMPT,
+#     tools=[update_story, get_story],
+#     context_schema=InputData,
+#     state_schema=StoryState,
+# )
 
 character_agent = create_agent(
     model=model,
@@ -366,9 +332,6 @@ image_prompt_agent = create_agent(
     name="image_prompt_agent",
     system_prompt=PANEL_PROMPT_AGENT_SYSTEM_PROMPT,
 )
-
-#TODO: make sure that character passing to generate_story is working, alternatively just do it manually.
-
 
 
 app = Flask(__name__)
@@ -408,11 +371,7 @@ def generate_story_panels(outline: str, synopsis: str, characters: str, genres: 
         scene_setting = scene[scene_setting_index + len("Setting: "):scene_characters_index]
         scene_characters = scene[scene_characters_index + len("Characters: "):bullet_points_index]
         bullet_points = scene[scene_characters_index:].split("* ")[1:]
-        # print(scene_characters)
-        # print(scene_setting)
-        # print(bullet_points)
-
-
+        
         future_scenes = ""
         future_bullet_points = ""
         for i in range(index + 1, len(scenes)):
@@ -421,7 +380,6 @@ def generate_story_panels(outline: str, synopsis: str, characters: str, genres: 
             future_bullet_points_index = future_scene.index("Bullet Points") + len("Bullet Points:\n")
             future_bullet_points += future_scene[future_bullet_points_index:]
 
-        # print(future_bullet_points)
 
         
         scene_characters = character_detect_agent.invoke({
@@ -444,11 +402,14 @@ def generate_story_panels(outline: str, synopsis: str, characters: str, genres: 
 def generate_prompts(panels: str, characters: str) -> str:
     split_panels = panels.split("**Panel ")[1:]
     image_prompts = ""
+    last_prompt = ""
     for pan in split_panels:
-        image_prompts += image_prompt_agent.invoke({
-            "messages": [HumanMessage(content=f"Panel: **{pan}\n\nCharacters: {characters}")]
+        res = image_prompt_agent.invoke({
+            "messages": [HumanMessage(content=f"Panel: **{pan}\n\nCharacters: {characters}\n\nLast Prompt: {last_prompt}")]
         }
         )["messages"][-1].content + "\n"
+        image_prompts += res
+        last_prompt = res
 
     return image_prompts
 
@@ -543,7 +504,7 @@ def run_manager_agent():
     synopsis = request.form.get("synopsis", "")
     characters = request.form.get("characters", "")
 
-    print("Manager agent invoked with input: " + outline)
+    print("Panel agent invoked with input: " + outline)
 
     story = generate_story_panels(outline, synopsis, characters, genres)
     return jsonify(story)
@@ -576,11 +537,26 @@ def run_image_agent():
     width = request.form.get("width", "576")
     height = request.form.get("height", "1024")
     print("Image generator invoked with input: " + image_prompt)
+    
     image = client.text_to_image(
         image_prompt,
+        width=int(width),
+        height=int(height),
         model="Tongyi-MAI/Z-Image-Turbo",
     )
-    image.save("image.png")
+    # device = "cuda"
+    # pipe = load_image_model()
+
+    # image = pipe(
+    #     prompt=image_prompt,
+    #     height=int(height),
+    #     width=int(width),
+    #     guidance_scale=1.0,
+    #     num_inference_steps=4,
+    #     generator=torch.Generator(device=device).manual_seed(0)
+    # ).images[0]
+
+    #image.save("image.png")
     img_bytes = io.BytesIO()
     image.save(img_bytes, format='PNG')
     img_bytes = img_bytes.getvalue()
