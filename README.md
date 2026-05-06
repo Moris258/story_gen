@@ -1,3 +1,3 @@
-flask command: 
+python -m http.server -d ChatBotThing -b 127.0.0.1 5500
 
-flask --app ./agents/story_gen.py run --debug --port 4500
+uv run story_gen.py

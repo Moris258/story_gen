@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 
-    <head>
+    <head>  
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width">
         <title>Chat Bot Thing</title>
@@ -21,10 +21,13 @@
                 <div id="chapters-value">
                     Chapters: <output id="amount">5</output>
                 </div>
-            
                 <input type="range" id="chapter-count-range" min="3" max="10" value="5" oninput="amount.value = this.value"/>
-                
 
+                <div id="image-prompt">
+                    <div>Image Prompt: </div>
+                    <textarea id="image-prompt-input" aria-label="Image prompt">In the art style of japanese manga black and white, one manga panel, no text, no speech bubbles</textarea>
+                </div>
+                
                 <button id="context-button" aria-label="Context Enter" onclick="this.blur();">
                     <span>Context</span>
                 </button>
@@ -64,6 +67,7 @@
                         
                         <select name="message-type" id="message-type">
                             <option value="manga">Manga</option>
+                            <option value="manga_dummy">Manga Dummy</option>
                             <option value="synopsis">Synopsis</option>
                             <option value="characters">Characters</option>
                             <option value="outline">Outline</option>

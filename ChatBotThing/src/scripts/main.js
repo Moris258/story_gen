@@ -13,6 +13,7 @@ const pasteContextButton = document.getElementById('paste-context-button');
 const genreDiv = document.getElementById('genre-div');
 const mangaNameInput = document.getElementById('manga-name-text-input');
 const chapterCountInput = document.getElementById('chapter-count-range');
+const imagePromptInput = document.getElementById('image-prompt-input');
 
 const saveButton = document.getElementById('save-button');
 //Image Modal
@@ -228,20 +229,25 @@ async function generateImages(message, type){
   let bubble = addMessage("", SENDER_ID.BOT);
   let returnData = ""
 
-  let prompts = message.split(/\*\*Panel\s[0-9]+\*\*\sPrompt:\s/i);
+  let prompts = message.split(/\*\*Panel\s.*\*\*\sPrompt:\s/i);
   prompts.splice(0, 1);
-  let conversation = panelArea.value.split(/\*\*Panel\s[0-9]+\*\*\s/i).join("").split("*");
+  let conversation = panelArea.value.split(/\*\*Panel\s.*\*\*\s/i);
   conversation.splice(0, 1);
   let convos = [];
-  let index = -1;
-  conversation.forEach(c => {
-    if(c.startsWith("Scene Description")){
-      convos.push("");
-      index++;
-    }
-    else
-      convos[index] += c + "\n";
+  conversation.forEach((con, index) => {
+    let convo = con.split("*")
+    convo.splice(0, 1);
+    convos.push("");
+    convo.forEach(c => {
+      if(c.startsWith("Scene Description")){
+      }
+      else if(c.trim() != "")
+        convos[index] += c;
+      });
+    convos[index] = convos[index].trim();
   });  
+  console.log(prompts.length);
+  console.log(convos);
 
   
   let imgContainer = document.createElement("div");
@@ -255,7 +261,8 @@ async function generateImages(message, type){
 
   try{
     for(let i = 0; i < prompts.length; i++){
-      let prompt = prompts[i] + " in the style of manga black and white";
+      let prompt = prompts[i] + " " + imagePromptInput.value;
+      console.log("Generating image for prompt: " + prompt);
       let convo = convos[i];
       let url = 'http://127.0.0.1:4500/' + type;
       let args = {"param1": prompt, "width": imgWidth, "height": imgHeight};
@@ -275,8 +282,9 @@ async function generateImages(message, type){
         img.height = imgHeight;
 
         ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
-        if(convo.trim() != "")
-          drawSpeechBubble(ctx, convo, {x: 0, y: 0}, canvas.width, canvas.height);
+        if(convo != null)
+          if(convo.trim() != "")
+            drawSpeechBubble(ctx, convo, {x: 0, y: 0}, canvas.width, canvas.height);
         img.src = canvas.toDataURL("image/png");
         imgContainer.appendChild(img);
         chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -286,10 +294,10 @@ async function generateImages(message, type){
     }
   }
   catch(err){
-    deleteMessage(bubble);
     console.log(err);
     
-    addMessage("Couldn't get response from bot.", SENDER_ID.ERROR);
+    addMessage("Error with image generation.", SENDER_ID.ERROR);
+    toggleInputDisable(false);
     return null;
   }
   
@@ -388,32 +396,6 @@ async function getBotReply(message, type, generateBubble = true){
       if(type != "manga")
           response = returnData.replace(/\n/g, "<br>");
     })
-    
-    // else{
-    //   await $.getJSON(url,
-    //     function(data, textStatus, jqXHR) {
-    //       returnData = data;
-        
-    //       if(type != "manga")
-    //         response = returnData.replace(/\n/g, "<br>");
-
-    //     }
-    //   );
-    // }
-
-    // if(type == "manga"){
-    //   synopsisArea.value = returnData.synopsis;
-    //   characterArea.value = returnData.characters;
-    //   outlineArea.value = returnData.outline;
-    //   panelArea.value = returnData.panels;
-    //   promptArea.value = returnData.prompts;
-    //   deleteMessage(bubble);
-
-
-    //   generateImages(returnData.prompts, "image")
-    //   return "";
-    // }
-
 
 
     if(generateBubble){
@@ -421,7 +403,10 @@ async function getBotReply(message, type, generateBubble = true){
       let copy_button = document.createElement("button");
       copy_button.className = "bot-message-button";
       copy_button.id = type;
-      copy_button.title = "Copy to context"
+      if(type == "help")
+        copy_button.title = "Copy to clipboard";  
+      else
+        copy_button.title = "Copy to context"
       copy_button.addEventListener('click', function copyToContext(){
         switch(this.id){
           case "synopsis":
@@ -524,15 +509,17 @@ chatForm.addEventListener('submit', async function (event) {
     addImgClickListeners(bubble);
     
   }
-  else if(type == "manga"){
+  else if(type == "manga" || type == "manga_dummy"){
     let bubble = addMessage("Generating synopsis from prompt...", SENDER_ID.BOT);
     let data = "";
-    // data = await getBotReply(message, "synopsis", false);
-    // if(data == ""){
-    //   deleteMessage(bubble);
-    //   return;
-    // }
-    // synopsisArea.value = data;
+    
+    data = await getBotReply(message, "synopsis", false);
+    if(data == ""){
+      deleteMessage(bubble);
+      return;
+    }
+    synopsisArea.value = data;
+    
     bubble.innerHTML += "<br><br>Generating characters...";
     data = await getBotReply(synopsisArea.value, "characters", false);
     if(data == ""){
@@ -554,6 +541,10 @@ chatForm.addEventListener('submit', async function (event) {
       return;
     }
     panelArea.value = data;
+    if(type == "manga_dummy"){
+      bubble.innerHTML = data.replace(/\n/g, "<br>");
+      return;
+    }
     bubble.innerHTML += "<br><br>Generating image prompts...";
     data = await getBotReply(panelArea.value, "prompts", false);
     if(data == ""){
@@ -561,8 +552,9 @@ chatForm.addEventListener('submit', async function (event) {
       return;
     }
     promptArea.value = data;
+
     deleteMessage(bubble);
-    bubble = await generateImages(message, type);
+    bubble = await generateImages(promptArea.value, type);
     addImgClickListeners(bubble);
   }
   else

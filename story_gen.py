@@ -1,10 +1,9 @@
 from dotenv import load_dotenv
-from langchain.messages import HumanMessage, ToolMessage, SystemMessage
+from langchain.messages import HumanMessage, ToolMessage
 from langchain.agents import AgentState, create_agent
 from langchain.tools import tool, ToolRuntime
 from dataclasses import dataclass
 from langchain_ollama import ChatOllama
-from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
 from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, Pipeline
 from peft import PeftModel
 from langgraph.types import Command
@@ -13,11 +12,16 @@ from flask_cors import CORS
 from flask import jsonify
 import torch
 from diffusers.pipelines.flux2.pipeline_flux2_klein import Flux2KleinPipeline
+from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 import io
 import base64
 from PIL import Image
 import os
+import gc
 from huggingface_hub import InferenceClient
+from sdnq import SDNQConfig # import sdnq to register it into diffusers and transformers
+from sdnq.common import use_torch_compile as triton_is_available
+from sdnq.loader import apply_sdnq_options_to_model
 
 load_dotenv()
 
@@ -31,7 +35,7 @@ def load_synopsis_model() -> tuple[Pipeline, PeftModel]:
     )
 
     model_id = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit"
-    lora_adapter_path = "Moris258/Meta-Llama-3.1-8B-Instruct-Manga-Synopsis-v.4-LORA"
+    lora_adapter_path = "Moris258/Meta-Llama-3.1-8B-Instruct-Manga-Synopsis-v.5-LORA"
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", trust_remote_code=True)
     lora_loaded_model = PeftModel.from_pretrained(model, lora_adapter_path, device_map="auto", trust_remote_code=True)
@@ -45,16 +49,21 @@ def load_synopsis_model() -> tuple[Pipeline, PeftModel]:
     )
     return pipe, lora_loaded_model
 
-def load_image_model():
+def load_image_model() -> DiffusionPipeline:
     dtype = torch.bfloat16
 
-    pipe = Flux2KleinPipeline.from_pretrained("black-forest-labs/FLUX.2-klein-4B", torch_dtype=dtype)
+    pipe = Flux2KleinPipeline.from_pretrained("Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic", torch_dtype=dtype)
+
+    if triton_is_available and (torch.cuda.is_available() or torch.xpu.is_available()):
+        pipe.transformer = apply_sdnq_options_to_model(pipe.transformer, use_quantized_matmul=True)
+        pipe.text_encoder = apply_sdnq_options_to_model(pipe.text_encoder, use_quantized_matmul=True)
+
     pipe.enable_model_cpu_offload()
     return pipe
 
 def generate_synopsis(input: str, pipe: Pipeline):
     messages = [
-        {"role": "system", "content": "You are a helpful assistant that creates manga synopses based on the given description. The generated synopsis should be at least 500 characters."},
+        {"role": "system", "content": "You are a helpful assistant that creates manga synopses based on the given description."},
         {"role": "user", "content": input},
     ]
 
@@ -75,21 +84,6 @@ story = ""
 #load model
 model = ChatOllama(model="llama3.1")
 
-MANAGER_AGENT_PROMPT = """
-    Pretend you are a writer creating a manga. Based on the provided bullet point, generate the story.
-    The scene also includes information about the scene setting, characters in the scene and the last panel of the story.
-    You are also provided all information about all future events. The future events information may be empty. Do not generate your own upcoming scenes.
-    Only generate story for the provided bullet point, not for future events.
-    For every bullet point in the scene, follow this step:
-        Step 1. use the "generate_story" tool to generate a section of the story based on the current bullet point in the scene, the last panel of the story generated so far, the character and setting information and information about future events.
-        If there are no future scenes, provide an empty string for future events field.
-        The format of "generate_story" should be: generate_story(bullet_point=bullet_point, last_panel=last_panel, future_events=future_events, characters=characters, setting=setting).
-
-    Make only 1 tool call at a time, and wait for the response before making the next tool call.
-    Return all generated panels for the current bullet point.
-    Do not return any extra information, just the panels.
-"""
-
 SUMMARY_AGENT_PROMPT = """
     You are an agent whose job it is to summarize a story provided in the prompt.
     The summary should be no longer than 5 sentences and should capture the main plot points and themes of the story.
@@ -105,12 +99,14 @@ STORY_AGENT_PROMPT = """
     You are also provided with a list of future events. Make sure that the generated story does not clash with any of the future events and that the story can flow naturally into the next event.
     Only generate story content that is relevant to the current bullet point in the outline. Do not include any content that is not relevant to the current bullet point, even if it is relevant to the overall story.
     Include the characters provided. You don't have to include all characters, only the most relevant ones to the current section of the story.
-    Try to incorporate the scene setting into the panel description.
+    Try to include the scene setting in the scene description. Try to refer to characters by their name instead of using pronouns.
     Generate a sequence of manga panels in text form that continue the story. Each panel should have a description of the scene and any dialogue between characters. The panels should be formatted as follows:
         **Panel 1**:
         *Scene Description: Description of the scene.
         *Character Name: Dialogue here.
     Generate at least 3 panels for each section of the story, but feel free to generate more if you think it is necessary to continue the story in a compelling way, but do not generate more than 10.
+    Always start the panel numbering from 1 for each bullet point, even if the panel numbering in the overall story is different. The panel number should only indicate the order of panels for the current bullet point, not the overall story.
+    Always include a scene description. If there is dialogue, include the character name followed by the dialogue. If there is no dialogue, just include the scene description.
     Return only the generated panels, do not include any extra text.
 """
 
@@ -137,19 +133,6 @@ class StoryState(AgentState):
 
 
 @tool
-def summarize_story(runtime: ToolRuntime) -> str:
-    """Summarize the story saved in the state generated so far."""
-    global story
-    try:
-        text = story
-    except KeyError:
-        text = ""
-    response = summary_agent.invoke({
-        "messages": [HumanMessage(content=text)]
-    })
-    return response["messages"][-1].content
-
-@tool
 def update_story(story_text: str, runtime: ToolRuntime) -> Command:
     """Update the story text in the state with the newly generated section."""
     global story
@@ -173,12 +156,6 @@ def get_story(runtime: ToolRuntime) -> str:
         return story
     except KeyError:
         return ""
-
-# @tool
-# def get_outline(runtime: ToolRuntime) -> str:
-#     """Get the outline from the context."""
-#     return runtime.context.outline
-
 
 
 CHARACTER_AGENT_SYSTEM_PROMPT = """
@@ -214,33 +191,16 @@ OUTLINE_AGENT_SYSTEM_PROMPT = """
     Return the generated outline as a list of strings, with each string representing a section of the outline.
     Return only the outline, do not generate any extra text.
 """
-    #     The outline should include at least these sections:
-    # 1. Story premise: A starting point that sets the stage for the story.
-    # 2. Middle development: A section that describes the main events and conflicts that occur in the middle of the story and lead to the story's ending.
-    # 3. Ending: A section that describes how the story concludes and resolves the main conflicts.
-    # The above sections are just a starting point. You can add more sections if you think they are necessary to create a comprehensive outline for the manga.
-
-OUTLINE_MANAGER_AGENT_SYSTEM_PROMPT = """
-    Pretend you are a writer creating a manga. Based on the provided synopsis by the user, you will first generate a list of characters that would be suitable for the story using the "generate_characters" tool.
-    Wait for the tool to generate the characters before proceeding to the next step.
-    Only after the characters have been generated, you will then create a general outline for the manga based on the provided synopsis and the generated characters.
-    The character information should be the same as the output from the "generate_characters" tool. Do not modify or add any extra information about the characters.
-    Return the generated story outline as a list of strings, with each string representing a section of the outline.
-    The outline should be long enough to generate the designated amount of chapters by the user, and it must include an ending.
-    Return only the outline, do not generate any extra text at the start or end.
-"""
 
 HELP_AGENT_SYSTEM_PROMPT = """
     You are a helpful agent designed to guide the user through this application.
     The purpose of this application is to generate manga panels from an initial prompt and a selection of genres.
-    The user can also generate just the manga synopsis, characters, outline, panel information or image prompts without creating the entire manga.
-    The user can also enter context information from the panel on the left.
+    The user can also generate just the manga synopsis, characters, outline, panel information, image prompts or images without creating the entire manga.
+    Explain to the user that the application requires certain context fields to be filled before certain generation steps.
+    Explain to the user that if they wish to generate the manga step by step, they should follow the order found in the drop down menu on the webpage, the order is as follows: synopsis, characters, outline, panels, prompts, images.
     If the user asks for help, explain this to them.
     You can also answer any general questions they may have or help with any tasks.
 """
-
-    # To generate the characters, you will use the tool "generate_characters" which takes the synopsis as input and returns a list of characters.
-    # To generate the outline, you will use the tool "generate_outline" which takes the synopsis and the generated characters as input and returns a structured outline for the manga.
 
 PANEL_PROMPT_AGENT_SYSTEM_PROMPT = """
     You are a helpful agent that creates prompts to generate images through image generation software.
@@ -248,14 +208,14 @@ PANEL_PROMPT_AGENT_SYSTEM_PROMPT = """
     You are also given a series of character descriptions including their physical description.
     You are also given the last prompt generated, which you can use to maintain consistency in the generated images.
     Based on the scene description and the character's physical description, generate a prompt for the panel that could
-    be used to generate an image. The prompt should be about a maximum of 2 sentences.
+    be used to generate an image. The prompt should be about a maximum of 2 sentences. Try to include background information in the prompt.
     Structure the message as such:
         **Panel "number of panel"**
         Prompt: "the image prompt"
-    If you encounter a character not included in the prompt, generate an appearance for them and use that same appearance going forward.
     Do not include character names, instead replace them with their physical description.
     Do not include any characters that aren't present in the scene description.
     In the prompt, do not include information about character conversations.
+    Generate only one prompt per panel. Do not generate multiple prompts for the same panel.
     Return only the prompts with no extra text.
 """
 
@@ -298,16 +258,6 @@ character_detect_agent = create_agent(
     name="character_detect_agent",
     system_prompt=CHARACTER_DETECT_AGENT
 )
-
-# manager_agent = create_agent(
-#     model = model,
-#     name="manager_agent",
-#     system_prompt=MANAGER_AGENT_PROMPT,
-#     tools=[update_story, get_story],
-#     context_schema=InputData,
-#     state_schema=StoryState,
-# )
-
 character_agent = create_agent(
     model=model,
     name="character_agent",
@@ -318,15 +268,7 @@ outline_agent = create_agent(
     model=model,
     name="outline_agent",
     system_prompt=OUTLINE_AGENT_SYSTEM_PROMPT
-)
-
-outline_manager_agent = create_agent(
-    model=model,
-    name="outline_manager_agent",
-    tools = [generate_characters],
-    system_prompt=OUTLINE_MANAGER_AGENT_SYSTEM_PROMPT,
-)
-
+) 
 image_prompt_agent = create_agent(
     model=model,
     name="image_prompt_agent",
@@ -358,7 +300,6 @@ def generate_story_panels(outline: str, synopsis: str, characters: str, genres: 
     global story
     story = ""
     scenes = outline.split("**Scene")
-    print(scenes)
     for scene in scenes:
         index = scenes.index(scene)
         
@@ -370,7 +311,7 @@ def generate_story_panels(outline: str, synopsis: str, characters: str, genres: 
         bullet_points_index = scene.index("Bullet Points")
         scene_setting = scene[scene_setting_index + len("Setting: "):scene_characters_index]
         scene_characters = scene[scene_characters_index + len("Characters: "):bullet_points_index]
-        bullet_points = scene[scene_characters_index:].split("* ")[1:]
+        bullet_points = scene[scene_characters_index:].split("*")[1:]
         
         future_scenes = ""
         future_bullet_points = ""
@@ -387,6 +328,7 @@ def generate_story_panels(outline: str, synopsis: str, characters: str, genres: 
         })["messages"][-1].content
         
         for point in bullet_points:
+            print("Generating story for bullet point: " + point)
             index = bullet_points.index(point)
             future_points = "\n"
             for i in range(index + 1, len(bullet_points)):
@@ -404,6 +346,7 @@ def generate_prompts(panels: str, characters: str) -> str:
     image_prompts = ""
     last_prompt = ""
     for pan in split_panels:
+        print("Generating image prompt for panel: " + pan)
         res = image_prompt_agent.invoke({
             "messages": [HumanMessage(content=f"Panel: **{pan}\n\nCharacters: {characters}\n\nLast Prompt: {last_prompt}")]
         }
@@ -413,47 +356,22 @@ def generate_prompts(panels: str, characters: str) -> str:
 
     return image_prompts
 
-@app.route("/help")
+def unload_model():
+    global model
+    model.keep_alive = 0
+    model.invoke("Generate EOL token.")
+    model.keep_alive = 5
+
+@app.route("/help", methods=['GET', 'POST'])
 def run_prompt_gen():
     req = request.form.get("param1", "")
     print("Helping with prompt: " + req)
-    return jsonify(help_agent.invoke({
+    response = help_agent.invoke({
         "messages": [HumanMessage(content=req)]
-    })["messages"][-1].content)
-
-@app.route("/manga", methods=['GET', 'POST'])
-def create_manga():
-    req = request.form.get("param1", "")
-    scenes = request.form.get("scenes", "5")
-    genres = request.form.get("genres", "")
-    if(genres != ""):
-        req += " genres: " + genres
-    print("Creating manga from prompt: " + req)
-    pipe, lora_model = load_synopsis_model()
-
-    synopsis = generate_synopsis(req, pipe)
-
-    print(synopsis)
-    del lora_model
-    del pipe
-
-    characters = character_agent.invoke({
-        "messages": [HumanMessage(content=synopsis)]
     })["messages"][-1].content
+    unload_model()
 
-    outline = outline_agent.invoke({
-        "messages": [HumanMessage(content=f"Synopsis: {synopsis}\nCharacters: {characters}\nScenes: {scenes}")]
-    })["messages"][-1].content
-
-    panels = generate_story_panels(outline, synopsis, characters, genres)
-
-    image_prompts = generate_prompts(panels, characters)
-
-    values = {"synopsis": synopsis, "characters": characters, "outline": outline, "panels": panels, "prompts": image_prompts}
-
-    return jsonify(values)
-
-
+    return jsonify(response)
 
 @app.route("/synopsis", methods=['GET', 'POST'])
 def run_synopsis_gen():
@@ -463,13 +381,19 @@ def run_synopsis_gen():
         req += " genres: " + genres
 
     print("Creating synopsis from prompt: " + req)
-    pipe, lora_model = load_synopsis_model();
+    pipe, model = load_synopsis_model();
 
     synopsis = generate_synopsis(req, pipe)
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()   
 
-    print(synopsis)
-    del lora_model
+
+
     del pipe
+    gc.collect()
+    torch.cuda.empty_cache()    
+
 
     return jsonify(synopsis)
 
@@ -481,6 +405,7 @@ def run_character_agent():
     response = character_agent.invoke({
         "messages": [HumanMessage(content=synopsis)]}
     )
+    unload_model()
     return jsonify(response["messages"][-1].content)
 
 @app.route("/outline", methods=['GET', 'POST'])
@@ -495,6 +420,7 @@ def run_outline_agent():
     response = outline_agent.invoke({
         "messages": [HumanMessage(content=f"Synopsis: {synopsis}\nCharacters: {characters}\nScenes: {scenes}")]}
     )
+    unload_model()
     return jsonify(response["messages"][-1].content)
 
 @app.route("/panels", methods=['GET', 'POST'])
@@ -504,18 +430,17 @@ def run_manager_agent():
     synopsis = request.form.get("synopsis", "")
     characters = request.form.get("characters", "")
 
-    print("Panel agent invoked with input: " + outline)
-
     story = generate_story_panels(outline, synopsis, characters, genres)
+    unload_model()
     return jsonify(story)
 
 @app.route("/prompts", methods=['GET', 'POST'])
 def run_prompt_agent():
     panels = request.form.get("param1", "")
     characters = request.form.get("characters", "")
-    print("Prompt manager invoked with input: " + panels)
 
     response = generate_prompts(panels, characters)
+    unload_model()
     
     return jsonify(response)
 
@@ -538,23 +463,23 @@ def run_image_agent():
     height = request.form.get("height", "1024")
     print("Image generator invoked with input: " + image_prompt)
     
-    image = client.text_to_image(
-        image_prompt,
-        width=int(width),
-        height=int(height),
-        model="Tongyi-MAI/Z-Image-Turbo",
-    )
-    # device = "cuda"
-    # pipe = load_image_model()
-
-    # image = pipe(
-    #     prompt=image_prompt,
-    #     height=int(height),
+    # image = client.text_to_image(
+    #     image_prompt,
     #     width=int(width),
-    #     guidance_scale=1.0,
-    #     num_inference_steps=4,
-    #     generator=torch.Generator(device=device).manual_seed(0)
-    # ).images[0]
+    #     height=int(height),
+    #     model="Tongyi-MAI/Z-Image-Turbo",
+    # )
+    device = "cuda"
+    pipe = load_image_model()
+
+    image = pipe(
+        prompt=image_prompt,
+        height=int(height),
+        width=int(width),
+        guidance_scale=1.0,
+        num_inference_steps=4,
+        generator=torch.Generator(device=device).manual_seed(0)
+    ).images[0]
 
     #image.save("image.png")
     img_bytes = io.BytesIO()
@@ -565,34 +490,5 @@ def run_image_agent():
 
     return jsonify(img_b64)
 
-@app.route("/bot_response_stream", methods=['GET', 'POST'])
-def run_manager_agent_stream():
-    print("Manager agent invoked with input: " + request.form.get("param1", ""))
-
-    # response = manager_agent.invoke({
-    #     "messages": [HumanMessage(content=request.form.get("param1", ""))]},
-    #     context=InputData(
-    #         synopsis=synopsis,
-    #         characters=characters,
-    #         outline=outline)
-    # )
-    # return jsonify(response["messages"][-1].content)
-    
-    def generate():
-        for token, metadata in manager_agent.stream(
-            {"messages": [HumanMessage(content=request.form.get("param1", ""))]},
-            stream_mode="messages",
-            context=InputData(
-                synopsis=synopsis,
-                characters=characters,
-                outline=outline)
-        ):
-
-
-        # token is a message chunk with token content
-        # metadata contains which node produced the token
-            if token.content:  # Check if there's actual content
-                yield f"data: {json.dumps({"text": token.content})}\n\n"  # Get the text of the last message chunk
-    return Response(stream_with_context(generate()), mimetype='text/event-stream')
-
-    # return jsonify("You wrote: " + request.args.get("param1", ""))
+if __name__ == "__main__":
+    app.run("127.0.0.1", 4500, debug=True)

@@ -67,6 +67,24 @@ body {
   font-size: 18px;
 }
 
+.toolbar #image-prompt{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 18px;
+}
+
+.toolbar #image-prompt textarea{
+  max-width: 180px;
+  max-height: 200px;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background-color: var(--textarea-background);
+}
+
 .toolbar input[type="range"]{
   -webkit-appearance: none;
   background: transparent;
