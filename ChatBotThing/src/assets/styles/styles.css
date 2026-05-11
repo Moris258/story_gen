@@ -459,7 +459,7 @@ button > span {
 .modal-content {
   position: relative;
   background-color: var(--background-color);
-  margin: 10% auto;
+  margin: 4% auto;
   overflow: auto;
   border: 1px solid var(--border-color);
   width: 50%;
