@@ -29,7 +29,6 @@ const outlineArea = document.getElementById('outlineTextArea');
 const panelArea = document.getElementById('panelTextArea');
 const promptArea = document.getElementById('promptTextArea');
 
-
 let currImgIndex = 0;
 let imgWidth = 576;
 let imgHeight = 1024;
@@ -181,27 +180,53 @@ function getLines(ctx, text, maxWidth) {
 
 function drawSpeechBubble(ctx, text, pos, maxWidth, maxHeight){
   let padding = 10;
-  let bottomPadding = 40;
-  let fontSize = 30;
+  let bottomPadding = 30;
+  let bubbleGap = 8;
+  let fontSize = 36;
+  let splitDialogue = text.trim().split("\n");
+  let textHeights = [];
+  let linesArray = [];
+
+
 
   ctx.font = fontSize + "px Arial";
   ctx.textAlign = "start";
   ctx.textBaseline = "hanging";
-  let textWidth = ctx.measureText(text).width;
-  let lines = getLines(ctx, text, maxWidth - padding * 4);
-  let textHeight = lines.length * fontSize + padding * 2;
-  pos.y = maxHeight - textHeight - bottomPadding;
   ctx.fillStyle = "#ffffff";
   ctx.lineWidth = "4";
   ctx.strokeStyle = "black"
-  ctx.fillRect(pos.x + padding, pos.y, maxWidth - padding * 2, textHeight);
-  ctx.strokeRect(pos.x + padding, pos.y, maxWidth - padding * 2, textHeight);
 
-  lines.forEach(line => {
-    ctx.fillStyle = "#000000";
-    ctx.fillText(line, pos.x + padding * 2, pos.y + padding);
-    pos.y += fontSize;
+
+  splitDialogue.forEach((dialogue, index) => {
+    let lines = getLines(ctx, dialogue, maxWidth - padding * 4);
+    linesArray.push(lines);
+    textHeights.push(lines.length * fontSize + padding * 2);
+  });  
+
+  splitDialogue.forEach((dialogue, index) => {
+    let followingTextHeight = 0;
+    for(let i = index; i < textHeights.length; i++){
+      followingTextHeight += textHeights[i] + bubbleGap;
+    }
+
+    ctx.fillStyle = "#ffffff";
+
+    let textWidth = ctx.measureText(dialogue).width;
+    pos.y = maxHeight - followingTextHeight - bottomPadding - bubbleGap;
+    ctx.fillRect(pos.x + padding, pos.y, maxWidth - padding * 2, textHeights[index]);
+    ctx.strokeRect(pos.x + padding, pos.y, maxWidth - padding * 2, textHeights[index]);
+  
+    linesArray[index].forEach(line => {
+      ctx.fillStyle = "#000000";
+      ctx.fillText(line, pos.x + padding * 2, pos.y + padding);
+      pos.y += fontSize;
+    });
   });
+
+
+
+
+  
 }
 
 const b64toBlob = (b64Data, contentType='', sliceSize=512) => {
@@ -229,10 +254,11 @@ async function generateImages(message, type){
   let bubble = addMessage("", SENDER_ID.BOT);
   let returnData = ""
 
-  let prompts = message.split(/\*\*Panel\s.*\*\*\sPrompt:\s/i);
+  let prompts = message.split(/\*\*Panel\s*.*\*\*.*\s*Prompt:\s*/i);
   prompts.splice(0, 1);
-  let conversation = panelArea.value.split(/\*\*Panel\s.*\*\*\s/i);
+  let conversation = panelArea.value.split(/\*\*Panel\s*.*\*\*/i);
   conversation.splice(0, 1);
+  
   let convos = [];
   conversation.forEach((con, index) => {
     let convo = con.split("*")
@@ -241,13 +267,12 @@ async function generateImages(message, type){
     convo.forEach(c => {
       if(c.startsWith("Scene Description")){
       }
-      else if(c.trim() != "")
+      else if(c.trim() != "" || c == "\n")
         convos[index] += c;
       });
     convos[index] = convos[index].trim();
   });  
-  console.log(prompts.length);
-  console.log(convos);
+  
 
   
   let imgContainer = document.createElement("div");
@@ -271,8 +296,6 @@ async function generateImages(message, type){
       await $.post(url, args,
       function(data, textStatus, jqXHR) {
         returnData = data;
-      
-        response = returnData.replace(/\n/g, "<br>");
       }
       
       );
@@ -329,7 +352,7 @@ async function generateImages(message, type){
     });
 
     const res = await zip.generateAsync({type: 'blob'});
-    DownloadFile(res, "panels.zip");
+    DownloadFile(res, mangaNameInput.value + ".zip");
     
     this.blur();
   });
@@ -343,8 +366,6 @@ async function generateImages(message, type){
 
 async function getBotReply(message, type, generateBubble = true){
   console.log("Getting bot reply for message: " + message);
-  // message = encodeURIComponent(message);
-
 
   toggleInputDisable(true);
   let response = "...";
@@ -386,6 +407,7 @@ async function getBotReply(message, type, generateBubble = true){
       break;
     case "prompts":
       args["characters"] = characterArea.value;
+      args["outline"] = outlineArea.value;
       break;
   }
   
@@ -393,7 +415,7 @@ async function getBotReply(message, type, generateBubble = true){
   try{
     await $.post(url, args, function(data){
       returnData = data;
-      if(type != "manga")
+      if(type != "manga" || type != "help")
           response = returnData.replace(/\n/g, "<br>");
     })
 
@@ -425,7 +447,7 @@ async function getBotReply(message, type, generateBubble = true){
             promptArea.value = returnData;
             break;
           default:
-            navigator.clipboard.writeText(returnData).then(function(){
+            navigator.clipboard.writeText(bubble.innerText).then(function(){
                 console.log("Successfully copied to clipboard!");
             }, function(err){
                 console.log("Failed to copy to clipboard." + err);
@@ -443,6 +465,7 @@ async function getBotReply(message, type, generateBubble = true){
     }
   }
   catch(error){
+    toggleInputDisable(false);
     if(generateBubble)
       deleteMessage(bubble);
     console.log(error);
@@ -465,8 +488,9 @@ function addImgClickListeners(bubble){
   if(bubble == null) return;
   let imgContainer = bubble.getElementsByClassName("img-container").item(0);
   let imgs = imgContainer.getElementsByTagName("img");
+  let currImgIndex = 0; 
   for(let i = 0; i < imgs.length; i++){
-    let img = imgs.item(i);    
+    let img = imgs.item(i);   
 
     img.addEventListener('click', function showImageModal(){
       imageModal.style.display = "flex";
@@ -474,21 +498,20 @@ function addImgClickListeners(bubble){
       imageModalImg.width = imgWidth/1.2;
       imageModalImg.height = imgHeight/1.2;
       currImgIndex = Array.prototype.indexOf.call(imgContainer.children, img);
-      lastImageButton.addEventListener('click', function lastImage(){
-        if(currImgIndex == 0) return;
-        currImgIndex--;
-        let imgs = imgContainer.getElementsByTagName("img");
-                    
-        imageModalImg.src = imgs.item(currImgIndex).src;
-      });
-      nextImageButton.addEventListener('click', function lastImage(){
-        if(currImgIndex >= imgs.length - 1) return;
-        currImgIndex++;
-                    
-        imageModalImg.src = imgs.item(currImgIndex).src;
-      });
     });
   }
+  lastImageButton.addEventListener('click', function lastImage(){
+    if(currImgIndex == 0) return;
+    currImgIndex--;
+                
+    imageModalImg.src = imgs.item(currImgIndex).src;
+  });
+  nextImageButton.addEventListener('click', function lastImage(){
+    if(currImgIndex >= imgs.length - 1) return;
+    currImgIndex++;
+                
+    imageModalImg.src = imgs.item(currImgIndex).src;
+  });
 }
 
 chatForm.addEventListener('submit', async function (event) {
@@ -608,6 +631,9 @@ loadContextInput.addEventListener("change", async function (){
       let checkbox = checkboxes.item(i);
       if(genres.includes(checkbox.value)){
         checkbox.checked = true;
+      }
+      else{
+        checkbox.checked = false;
       }
     }
 

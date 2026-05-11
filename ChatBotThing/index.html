@@ -7,6 +7,7 @@
         <title>Chat Bot Thing</title>
 
         <link rel="stylesheet" href="./src/assets/styles/styles.css">
+        <script type="module" src="https://cdn.jsdelivr.net/npm/zero-md@3?register"></script>
         
     </head>
     <body>
@@ -25,7 +26,7 @@
 
                 <div id="image-prompt">
                     <div>Image Prompt: </div>
-                    <textarea id="image-prompt-input" aria-label="Image prompt">In the art style of japanese manga black and white, one manga panel, no text, no speech bubbles</textarea>
+                    <textarea id="image-prompt-input" aria-label="Image prompt">In the art style of japanese anime black and white, no text, no speech bubbles</textarea>
                 </div>
                 
                 <button id="context-button" aria-label="Context Enter" onclick="this.blur();">
@@ -67,7 +68,6 @@
                         
                         <select name="message-type" id="message-type">
                             <option value="manga">Manga</option>
-                            <option value="manga_dummy">Manga Dummy</option>
                             <option value="synopsis">Synopsis</option>
                             <option value="characters">Characters</option>
                             <option value="outline">Outline</option>
@@ -120,7 +120,7 @@
         </div>
 
         <script src="src/scripts/jquery.js"></script>
-        <script src="src/scripts/main.js"></script>
+        <script type="module" src="src/scripts/main.js"></script>
         <script src="src/scripts/Stuk-jszip-643714a/dist/jszip.js"></script>
     </body>
 

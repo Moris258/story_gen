@@ -22,6 +22,7 @@ from huggingface_hub import InferenceClient
 from sdnq import SDNQConfig # import sdnq to register it into diffusers and transformers
 from sdnq.common import use_torch_compile as triton_is_available
 from sdnq.loader import apply_sdnq_options_to_model
+import random
 
 load_dotenv()
 
@@ -80,13 +81,15 @@ client = InferenceClient(
 )
 
 story = ""
+story_summary_container = ""
+STORY_MAX_LENGTH = 10000
 
 #load model
-model = ChatOllama(model="llama3.1")
+model = ChatOllama(model="su_robin/gemma-4-E4B-it-Q4_K_M")
 
 SUMMARY_AGENT_PROMPT = """
     You are an agent whose job it is to summarize a story provided in the prompt.
-    The summary should be no longer than 5 sentences and should capture the main plot points and themes of the story.
+    The summary should be no longer than 10 sentences and should capture the main plot points and themes of the story.
     The summary should be concise and should not include any unnecessary details.
     Return only the summary, do not include any extra text.
     If no story text is provided, return an empty string.
@@ -99,11 +102,12 @@ STORY_AGENT_PROMPT = """
     You are also provided with a list of future events. Make sure that the generated story does not clash with any of the future events and that the story can flow naturally into the next event.
     Only generate story content that is relevant to the current bullet point in the outline. Do not include any content that is not relevant to the current bullet point, even if it is relevant to the overall story.
     Include the characters provided. You don't have to include all characters, only the most relevant ones to the current section of the story.
-    Try to include the scene setting in the scene description. Try to refer to characters by their name instead of using pronouns.
+    Try to stick to the included setting when generating the scene description. Try to refer to characters by their name instead of using pronouns.
     Generate a sequence of manga panels in text form that continue the story. Each panel should have a description of the scene and any dialogue between characters. The panels should be formatted as follows:
-        **Panel 1**:
+        **Panel 1**
         *Scene Description: Description of the scene.
         *Character Name: Dialogue here.
+    Try to make the descriptions and dialogue more concrete and to the point, and less vague.
     Generate at least 3 panels for each section of the story, but feel free to generate more if you think it is necessary to continue the story in a compelling way, but do not generate more than 10.
     Always start the panel numbering from 1 for each bullet point, even if the panel numbering in the overall story is different. The panel number should only indicate the order of panels for the current bullet point, not the overall story.
     Always include a scene description. If there is dialogue, include the character name followed by the dialogue. If there is no dialogue, just include the scene description.
@@ -114,7 +118,7 @@ CHARACTER_DETECT_AGENT = """
     You are an agent whose job it is to return information about the characters.
     You are given a list of all characters, return information about those characters that are included in mentioned characters.
     Structure the output as such for every character mentioned:
-        "Full Name", "Gender (male/female)"
+        "Full Name", "Gender (male/female)" age: "character age"
         Physical Description: "the character's physical description"
         Personality Description: "the character's personality description"
         Connection to Characters: "their connection to other characters"
@@ -131,42 +135,14 @@ class InputData:
 class StoryState(AgentState):
     text: str
 
-
-@tool
-def update_story(story_text: str, runtime: ToolRuntime) -> Command:
-    """Update the story text in the state with the newly generated section."""
-    global story
-    story += story_text + "\n"
-    try:
-        return Command(update={
-            "text": runtime.state["text"] + "\n" + story_text,
-            "messages": [ToolMessage("Successfully updated story text", tool_call_id=runtime.tool_call_id)]
-            })
-    except KeyError:
-        return Command(update={
-            "text": story_text,
-            "messages": [ToolMessage("Successfully updated story text", tool_call_id=runtime.tool_call_id)]
-            })
-
-@tool
-def get_story(runtime: ToolRuntime) -> str:
-    """Get the story text from the state."""
-    global story
-    try:
-        return story
-    except KeyError:
-        return ""
-
-
 CHARACTER_AGENT_SYSTEM_PROMPT = """
-    Pretend you are a writer creating a manga. Based on the provided synposis in the user's prompt, create a list of characters that would be suitable for the story.
+    Pretend you are a writer creating a manga. Based on the provided synopsis in the user's prompt, create a list of characters that would be suitable for the story.
     The characters should be diverse and interesting, with unique personalities and backgrounds that fit the story's synopsis.
     Format the character description as such:
-        "Full Name", "Gender (male/female)"
+        "Full Name", "Gender (male/female)" age: "character age"
         Physical Description: "the character's physical description"
         Personality Description: "the character's personality description"
         Connection to Characters: "their connection to other characters"
-    Return the generated characters as a string.
     Return only information about the characters, do not generate any extra text at the start or the end.
 """
 #
@@ -175,20 +151,22 @@ OUTLINE_AGENT_SYSTEM_PROMPT = """
     Pretend that you are a writer creating a general outline for a manga. Base the outline on the provided synopsis in the user's prompt.
     Generate an amount of scenes equal to the requested amount in the user's prompt if it is specified.
     The outline should include characters also provided in the user's prompt. The outline should be in a structured format, with clear sections and bullet points for each part of the story.
-    Also include information about which characters are present for each scene. Include information about the scene setting. Include only one specific setting, not an option between two or more.
+    The generated bullet points should be phrased as events that happen, rather than descriptions.
+    Also include information about which characters are present for each scene. Only these characters should feature in this scene.
+    Include information about the scene setting. Include only one specific setting, not an option between two or more.
     Generate the scene outlines one by one.
     The outline should be in a structured as such:
-        **"Scene number and name"**
+        **Scene number and name**
             Setting: "place where the scene is set"
             Characters: "characters in scene"
             Bullet Points:
                 *"first bullet point for scene"
                 *"second bullet point for scene"
                 etc.
+    Do not generate trailing * characters for each bullet point.
     The outline should be detailed enough to provide a clear roadmap for writing the manga, but it should not include any actual story content or dialogue.
     Focus on creating a high-level overview of the story's structure and key elements based on the provided synopsis and characters.
-    Every scene should have atleast 3 bullet points.
-    Return the generated outline as a list of strings, with each string representing a section of the outline.
+    Every scene should have around 3 bullet points.
     Return only the outline, do not generate any extra text.
 """
 
@@ -199,24 +177,62 @@ HELP_AGENT_SYSTEM_PROMPT = """
     Explain to the user that the application requires certain context fields to be filled before certain generation steps.
     Explain to the user that if they wish to generate the manga step by step, they should follow the order found in the drop down menu on the webpage, the order is as follows: synopsis, characters, outline, panels, prompts, images.
     If the user asks for help, explain this to them.
-    You can also answer any general questions they may have or help with any tasks.
-"""
+    You can also answer any general questions they may have or help with any tasks. In this case you don't need to explain the application to them.
+    Responds in an HTML friendly format to be displayed in a <div>. Display the message in dark mode.
+
+# PANEL_PROMPT_AGENT_SYSTEM_PROMPT = """
+#     You are a helpful agent that creates prompts to generate images through image generation software.
+#     You are given a panel that contains the scene description of that panel.
+#     You are also given a series of character descriptions including their physical description.
+#     You are also given the last prompt generated, which you can use to maintain consistency in the generated images.
+#     Based on the scene description and the character's physical description, generate a prompt for the panel that could
+#     be used to generate an image. Try to match the provided scene description as closely as possible.
+#     Try to use the included setting to generate background information in the prompt.
+#     Structure the message as such:
+#         **Panel "number of panel"**
+#         Prompt: "the image prompt"
+#     Do not include character names, instead replace them with their physical description. 
+#     Make the physical description very detailed and based on the provided physical description.
+#     Do not include any characters that aren't present in the scene description.
+#     In the prompt, do not include information about character conversations.
+#     Generate only one prompt per panel. Do not generate multiple prompts for the same panel.
+#     Return only the prompts with no extra text.
+# """
 
 PANEL_PROMPT_AGENT_SYSTEM_PROMPT = """
     You are a helpful agent that creates prompts to generate images through image generation software.
     You are given a panel that contains the scene description of that panel.
-    You are also given a series of character descriptions including their physical description.
+    You are also given a series of character descriptions including their physical description and outfit information.
     You are also given the last prompt generated, which you can use to maintain consistency in the generated images.
-    Based on the scene description and the character's physical description, generate a prompt for the panel that could
-    be used to generate an image. The prompt should be about a maximum of 2 sentences. Try to include background information in the prompt.
+    Based on the scene description and the character's physical description and outfit, generate a prompt for the panel that could
+    be used to generate an image. Try to include every detail in the provided scene description, including character actions.
+    Try to use the included setting to generate background information in the prompt.
     Structure the message as such:
         **Panel "number of panel"**
         Prompt: "the image prompt"
-    Do not include character names, instead replace them with their physical description.
-    Do not include any characters that aren't present in the scene description.
+    Do not include character names, instead replace them with their physical description and outfit information. 
+    Make the physical description very detailed and based on the provided physical description and outfit.
+    Only include character descriptions in the prompt if they are mentioned in the scene description.
     In the prompt, do not include information about character conversations.
     Generate only one prompt per panel. Do not generate multiple prompts for the same panel.
     Return only the prompts with no extra text.
+"""
+
+SETTING_DETECT_AGENT_SYSTEM_PROMPT = """
+    You are a helpful assistant that generates a scene setting from a manga panel description.
+    You are given a panel containing information about the scene description. You should analyze that scene description and return a concise description of
+    the setting that scene is taking place in. The description should not be longer than a few words.
+"""
+
+CLOTHES_GENERATOR_AGENT = """
+    Pretend you are a manga writer deciding on what clothes a character should be wearing in a certain scene.
+    You are given a list of characters and scene setting and a manga panel containing a scene description.
+    Based on the given information, add information about each character's outfit to their character information.
+    The outfit description should be generic and not specific to the provided scene.
+    The outfit should be a generic description, not including names.
+    Include information about the major parts of the outfit.
+    Return only the character information including the newly generated outfit information.
+    Do not generate any extra text.
 """
 
 @tool
@@ -275,6 +291,18 @@ image_prompt_agent = create_agent(
     system_prompt=PANEL_PROMPT_AGENT_SYSTEM_PROMPT,
 )
 
+setting_detect_agent = create_agent(
+    model=model,
+    name="setting_detect_agent",
+    system_prompt=SETTING_DETECT_AGENT_SYSTEM_PROMPT,
+)
+
+clothes_generator_agent = create_agent(
+    model=model,
+    name="clothes_generator_agent",
+    system_prompt=CLOTHES_GENERATOR_AGENT,
+)
+
 
 app = Flask(__name__)
 CORS(app)
@@ -282,9 +310,10 @@ CORS(app)
 def generate_story(bullet_point: str, last_panel: str, future_events: str, characters: str, setting:str, genres: str) -> str:
     """Generate a section of the story based on the provided bullet point, last sentence, story summary, and characters."""
     global story
-    if story != "":
+    global story_summary_container
+    if story_summary_container != "":
         story_summary = summary_agent.invoke({
-            "messages": [HumanMessage(content=story)]
+            "messages": [HumanMessage(content=story_summary_container)]
         })["messages"][-1].content
     else:
         story_summary = ""
@@ -298,13 +327,13 @@ def generate_story(bullet_point: str, last_panel: str, future_events: str, chara
 def generate_story_panels(outline: str, synopsis: str, characters: str, genres: str) -> str:
     """Generates story panels from input."""
     global story
+    global story_summary_container
     story = ""
-    scenes = outline.split("**Scene")
+    scenes = outline.split("**Scene")[1:]
+    include_last_panel = False
     for scene in scenes:
         index = scenes.index(scene)
-        
-        if(index == 0):
-            continue
+        include_last_panel = False
         
         scene_characters_index = scene.index("Characters")
         scene_setting_index = scene.index("Setting")
@@ -312,6 +341,10 @@ def generate_story_panels(outline: str, synopsis: str, characters: str, genres: 
         scene_setting = scene[scene_setting_index + len("Setting: "):scene_characters_index]
         scene_characters = scene[scene_characters_index + len("Characters: "):bullet_points_index]
         bullet_points = scene[scene_characters_index:].split("*")[1:]
+        
+        for point in bullet_points:
+            if(point.strip() == ""):
+                bullet_points.remove(point)
         
         future_scenes = ""
         future_bullet_points = ""
@@ -334,25 +367,82 @@ def generate_story_panels(outline: str, synopsis: str, characters: str, genres: 
             for i in range(index + 1, len(bullet_points)):
                 future_points += "* " + bullet_points[i]
 
-            last_panel = story.split("**Panel ")[-1]
+            last_panel = ""
+            if(include_last_panel):
+                last_panel = story.split("**Panel ")[-1]
 
-            story += generate_story(point, last_panel, future_points + future_bullet_points, scene_characters, scene_setting, genres)
+            segment = generate_story(point, last_panel, future_points + future_bullet_points, scene_characters, scene_setting, genres)
+            story_summary_container += segment
+            story += segment
 
+            if(len(story_summary_container) > STORY_MAX_LENGTH):
+                story_summary_container = summary_agent.invoke({
+                    "messages": [HumanMessage(content=story_summary_container)]
+                })["messages"][-1].content
+
+            include_last_panel = True
     return story
 
+def is_first_panel(panel: str) -> bool:
+    if(panel[0] == "1"):
+        return True
+    return False
 
-def generate_prompts(panels: str, characters: str) -> str:
+def generate_prompts(outline: str, panels: str, characters: str) -> str:
     split_panels = panels.split("**Panel ")[1:]
     image_prompts = ""
     last_prompt = ""
+    setting = ""
+    scene_characters = ""
+    scene_index = 0
+    bullet_point_index = 0
+    scenes = outline.split("**Scene")[1:]
+    scene_lengths = []
+
+
+    for scene in scenes:
+        bullet_points_index = scene.index("Bullet Points")
+        bullet_points = scene[bullet_points_index:].split("*")[1:]
+        
+        for point in bullet_points:
+            if(point.strip() == ""):
+                bullet_points.remove(point)
+        
+        scene_lengths.append(len(bullet_points))
+
+
     for pan in split_panels:
         print("Generating image prompt for panel: " + pan)
+        
+        if(is_first_panel(pan)):
+            if(bullet_point_index == 0):
+                setting = scenes[scene_index].split("Setting:")[1].split("\n")[0]
+                scene_characters = scenes[scene_index].split("Characters:")[1].split("\n")[0]
+                scene_characters = character_detect_agent.invoke({
+                    "messages": [HumanMessage(content=f"all characters: {characters}\n\nmentioned characters: {scene_characters}")]
+                })["messages"][-1].content
+                scene_characters = clothes_generator_agent.invoke({
+                    "messages": [HumanMessage(content=f"Characters: {scene_characters}\n\nSetting: {setting}\n\nPanel: {pan}")]
+                })["messages"][-1].content
+
+
+                print("Setting: " + setting)
+                print("Characters: " + scene_characters)
+            
+            bullet_point_index += 1
+            if(bullet_point_index >= scene_lengths[scene_index]):
+                scene_index += 1
+                bullet_point_index = 0
+
         res = image_prompt_agent.invoke({
-            "messages": [HumanMessage(content=f"Panel: **{pan}\n\nCharacters: {characters}\n\nLast Prompt: {last_prompt}")]
+            "messages": [HumanMessage(content=f"Panel: {pan}\n\nSetting: {setting}\n\nCharacters: {scene_characters}\n\nLast Prompt: {last_prompt}")]
         }
         )["messages"][-1].content + "\n"
         image_prompts += res
         last_prompt = res
+
+
+
 
     return image_prompts
 
@@ -438,8 +528,9 @@ def run_manager_agent():
 def run_prompt_agent():
     panels = request.form.get("param1", "")
     characters = request.form.get("characters", "")
+    outline = request.form.get("outline", "")
 
-    response = generate_prompts(panels, characters)
+    response = generate_prompts(outline, panels, characters)
     unload_model()
     
     return jsonify(response)
@@ -463,12 +554,6 @@ def run_image_agent():
     height = request.form.get("height", "1024")
     print("Image generator invoked with input: " + image_prompt)
     
-    # image = client.text_to_image(
-    #     image_prompt,
-    #     width=int(width),
-    #     height=int(height),
-    #     model="Tongyi-MAI/Z-Image-Turbo",
-    # )
     device = "cuda"
     pipe = load_image_model()
 
@@ -478,10 +563,9 @@ def run_image_agent():
         width=int(width),
         guidance_scale=1.0,
         num_inference_steps=4,
-        generator=torch.Generator(device=device).manual_seed(0)
+        generator=torch.Generator(device=device).manual_seed(random.randint(0, 10000))
     ).images[0]
-
-    #image.save("image.png")
+    
     img_bytes = io.BytesIO()
     image.save(img_bytes, format='PNG')
     img_bytes = img_bytes.getvalue()
